@@ -59,7 +59,8 @@ export class EmailClient {
 
     // Se for um magic link e o transporte suportar, captura o link
     if (data.email === "magic_link" && "getLastMagicLink" in this.#transport) {
-      return (this.#transport as any).getLastMagicLink();
+      const magicLink = (this.#transport as any).getLastMagicLink();
+      return magicLink;
     }
 
     return null;

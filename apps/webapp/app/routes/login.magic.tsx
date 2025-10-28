@@ -77,13 +77,18 @@ export async function loader({ request }: LoaderFunctionArgs): Promise<any> {
 
   // Captura o magic link do header se disponível
   const magicLink = request.headers.get("X-Magic-Link");
+  
+  // Tenta capturar da session também
+  const sessionMagicLink = session.get("magicLink");
+  
+  const finalMagicLink = magicLink || sessionMagicLink;
 
   return typedjson(
     {
       emailLoginEnabled: true,
       magicLinkSent,
       magicLinkError,
-      magicLink: magicLink || undefined,
+      magicLink: finalMagicLink || undefined,
     },
     {
       headers: { "Set-Cookie": await commitSession(session) },
@@ -109,13 +114,21 @@ export async function action({ request }: ActionFunctionArgs) {
   if (action === "send") {
     const headers = await authenticator
       .authenticate("email-link", request)
-      .catch((headers) => {
+      .catch(async (headers) => {
         // Tenta capturar o magic link do global storage
         const magicLink = (global as any).__lastMagicLink;
         
-        if (magicLink && headers instanceof Headers) {
-          // Adiciona o magic link como um header para ser exibido no cliente
-          headers.append("X-Magic-Link", magicLink);
+        if (magicLink) {
+          // Armazena na session como fallback
+          const session = await getUserSession(request);
+          session.set("magicLink", magicLink);
+          
+          if (headers instanceof Headers) {
+            // Adiciona o magic link como um header para ser exibido no cliente
+            headers.append("X-Magic-Link", magicLink);
+            // Adiciona o cookie da session atualizada
+            headers.append("Set-Cookie", await commitSession(session));
+          }
         }
         
         return headers;
