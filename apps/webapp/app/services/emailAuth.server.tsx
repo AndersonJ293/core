@@ -13,7 +13,17 @@ if (!secret) throw new Error("Missing MAGIC_LINK_SECRET env variable.");
 
 const emailStrategy = new EmailLinkStrategy(
   {
-    sendEmail: sendMagicLinkEmail,
+    sendEmail: async (options: any) => {
+      const result = await sendMagicLinkEmail(options);
+      
+      // Se estiver em ambiente local e tivermos o magic link, armazena globalmente
+      if (result && typeof window === 'undefined') {
+        // Armazena o magic link para ser recuperado pela rota
+        (global as any).__lastMagicLink = result;
+      }
+      
+      return;
+    },
     secret,
     magicEndpoint: `${APP_ORIGIN}/magic`,
     cookie: {

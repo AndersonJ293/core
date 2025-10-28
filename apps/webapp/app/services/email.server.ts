@@ -55,17 +55,24 @@ function buildTransportOptions(): MailTransportOptions {
   }
 }
 
-export async function sendMagicLinkEmail(options: any): Promise<void> {
+export async function sendMagicLinkEmail(options: any): Promise<string | void> {
   logger.debug("Sending magic link email", {
     email: options.email,
   });
 
   try {
-    return await client.send({
+    const result = await client.send({
       email: "magic_link",
       to: options.email,
       magicLink: options.magicLink,
     });
+    
+    // Retorna o magic link se disponível (ambiente local)
+    if (result) {
+      return result;
+    }
+    
+    return;
   } catch (error) {
     logger.error("Error sending magic link email", {
       error: JSON.stringify(error),

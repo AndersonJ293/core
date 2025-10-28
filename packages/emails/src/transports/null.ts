@@ -6,16 +6,26 @@ export type NullMailTransportOptions = {
 }
 
 export class NullMailTransport implements MailTransport {
+  private magicLink: string | null = null;
+
   constructor(options: NullMailTransportOptions) {
   }
 
   async send({to, subject, react}: MailMessage): Promise<void> {
+    const renderedContent = render(react, {
+      plainText: true,
+    });
+
+    // Extrai o magic link do conteúdo renderizado
+    const magicLinkMatch = renderedContent.match(/https?:\/\/[^\s]+/);
+    if (magicLinkMatch) {
+      this.magicLink = magicLinkMatch[0];
+    }
+
     console.log(`
 ##### sendEmail to ${to}, subject: ${subject}
 
-${render(react, {
-      plainText: true,
-    })}
+${renderedContent}
     `);
   }
 
@@ -25,5 +35,10 @@ ${render(react, {
 
 ${text}
     `);
+  }
+
+  // Método para obter o último magic link capturado
+  getLastMagicLink(): string | null {
+    return this.magicLink;
   }
 }
