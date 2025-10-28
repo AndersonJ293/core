@@ -87,6 +87,8 @@ cd core
 2. Configure environment variables in `core/.env`:
 ```
 OPENAI_API_KEY=your_openai_api_key
+# Optional: Use OpenAI-compatible APIs
+OPENAI_BASE_URL=https://your-api-endpoint.com/v1
 ```
 3. Start the service
 ```
@@ -96,6 +98,8 @@ docker-compose up -d
 Once deployed, you can configure your AI providers (OpenAI, Anthropic) and start building your memory graph.
 
 👉 [View complete self-hosting guide](https://docs.heysol.ai/self-hosting/docker)
+
+📖 **[OpenAI-Compatible URLs Guide](docs/openai-compatible-urls.md)** - Learn how to use Azure OpenAI, LocalAI, Ollama, Together AI, and other compatible providers
 
 Note: We tried open-source models like Ollama or GPT OSS but facts generation were not good, we are still figuring out how to improve on that and then will also support OSS models.
 

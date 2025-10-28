@@ -50,6 +50,7 @@ export const getModel = (takeModel?: string) => {
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
   const googleKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
   const openaiKey = process.env.OPENAI_API_KEY;
+  const openaiBaseUrl = process.env.OPENAI_BASE_URL;
   let ollamaUrl = process.env.OLLAMA_URL;
   model = model || process.env.MODEL || "gpt-4.1-2025-04-14";
 
@@ -81,7 +82,11 @@ export const getModel = (takeModel?: string) => {
       if (!openaiKey) {
         throw new Error("No OpenAI API key found. Set OPENAI_API_KEY");
       }
-      modelInstance = openai(model);
+      // Use custom baseURL if provided, otherwise use default
+      const openaiProvider = openaiBaseUrl
+        ? openai(model, { baseURL: openaiBaseUrl })
+        : openai(model);
+      modelInstance = openaiProvider;
     }
 
     return modelInstance;
@@ -192,8 +197,13 @@ export async function getEmbedding(text: string) {
 
   if (model === "text-embedding-3-small") {
     // Use OpenAI embedding model when explicitly requested
+    const openaiBaseUrl = process.env.OPENAI_BASE_URL;
+    const embeddingProvider = openaiBaseUrl
+      ? openai.embedding("text-embedding-3-small", { baseURL: openaiBaseUrl })
+      : openai.embedding("text-embedding-3-small");
+    
     const { embedding } = await embed({
-      model: openai.embedding("text-embedding-3-small"),
+      model: embeddingProvider,
       value: text,
     });
     return embedding;

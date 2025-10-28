@@ -28,10 +28,11 @@ export class OpenAIBatchProvider extends BaseBatchProvider {
 
   private openaiClient: OpenAI;
 
-  constructor(options?: { apiKey?: string }) {
+  constructor(options?: { apiKey?: string; baseURL?: string }) {
     super();
     this.openaiClient = new OpenAI({
       apiKey: options?.apiKey || process.env.OPENAI_API_KEY,
+      baseURL: options?.baseURL || process.env.OPENAI_BASE_URL,
     });
   }
 
