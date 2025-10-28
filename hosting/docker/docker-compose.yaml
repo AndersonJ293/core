@@ -5,12 +5,13 @@ x-logging: &logging-config
     max-file: ${LOGGING_MAX_FILES:-5}
     compress: ${LOGGING_COMPRESS:-true}
 
-version: "3.8"
 
 services:
   core:
     container_name: core-app
-    image: redplanethq/core:${VERSION}
+    build:
+      context: ../../
+      dockerfile: docker/Dockerfile
     environment:
       - NODE_ENV=${NODE_ENV}
       - DATABASE_URL=${DATABASE_URL}
@@ -73,7 +74,7 @@ services:
     networks:
       - core
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-docker}"]
       interval: 10s
       timeout: 5s
       retries: 5
