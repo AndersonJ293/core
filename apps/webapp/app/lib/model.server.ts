@@ -51,6 +51,7 @@ export const getModel = (takeModel?: string) => {
   const googleKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
   const openaiKey = process.env.OPENAI_API_KEY;
   const openaiBaseUrl = process.env.OPENAI_BASE_URL;
+  const openaiEmbeddingsBaseUrl = process.env.OPENAI_EMBEDDINGS_BASE_URL;
   let ollamaUrl = process.env.OLLAMA_URL;
   model = model || process.env.MODEL || "gpt-4.1-2025-04-14";
 
@@ -197,9 +198,9 @@ export async function getEmbedding(text: string) {
 
   if (model === "text-embedding-3-small") {
     // Use OpenAI embedding model when explicitly requested
-    const openaiBaseUrl = process.env.OPENAI_BASE_URL;
-    const embeddingProvider = openaiBaseUrl
-      ? openai.embedding("text-embedding-3-small", { baseURL: openaiBaseUrl })
+    const embeddingBaseUrl = openaiEmbeddingsBaseUrl || openaiBaseUrl;
+    const embeddingProvider = embeddingBaseUrl
+      ? openai.embedding("text-embedding-3-small", { baseURL: embeddingBaseUrl })
       : openai.embedding("text-embedding-3-small");
     
     const { embedding } = await embed({
