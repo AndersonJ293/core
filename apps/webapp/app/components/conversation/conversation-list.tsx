@@ -3,7 +3,17 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { AutoSizer, List, type ListRowRenderer } from "react-virtualized";
 import { cn } from "~/lib/utils";
 import { Button } from "../ui";
-import { LoaderCircle } from "lucide-react";
+import { LoaderCircle, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
 
 type ConversationItem = {
   id: string;
@@ -38,11 +48,14 @@ export const ConversationList = ({
   currentConversationId?: string;
 }) => {
   const fetcher = useFetcher<ConversationListResponse>();
+  const deleteFetcher = useFetcher();
   const navigate = useNavigate();
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [hasNextPage, setHasNextPage] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [conversationToDelete, setConversationToDelete] = useState<string | null>(null);
 
   // Prevent duplicate conversations when paginating
   const loadedConversationIds = useRef<Set<string>>(new Set());
@@ -67,6 +80,46 @@ export const ConversationList = ({
     loadMoreConversations(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Handle delete success
+  useEffect(() => {
+    if (deleteFetcher.data && deleteFetcher.state === "idle") {
+      if (conversationToDelete) {
+        // Remove from local state
+        setConversations((prev) => 
+          prev.filter((c) => c.id !== conversationToDelete)
+        );
+        loadedConversationIds.current.delete(conversationToDelete);
+        
+        // If it was the current conversation, redirect to conversation list
+        if (currentConversationId === conversationToDelete) {
+          navigate("/home/conversation");
+        }
+        
+        setConversationToDelete(null);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deleteFetcher.data, deleteFetcher.state, conversationToDelete]);
+
+  const handleDeleteClick = (conversationId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent navigation
+    setConversationToDelete(conversationId);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = () => {
+    if (conversationToDelete) {
+      deleteFetcher.submit(
+        {},
+        {
+          method: "DELETE",
+          action: `/api/v1/conversation/${conversationToDelete}/delete`,
+        }
+      );
+    }
+    setDeleteDialogOpen(false);
+  };
 
   // Handle fetcher response
   useEffect(() => {
@@ -136,31 +189,43 @@ export const ConversationList = ({
       return (
         <div key={key} style={style}>
           <div className="px-1 pr-2">
-            <Button
-              variant="ghost"
-              className={cn(
-                "border-border h-auto w-full justify-start rounded p-2 py-1 text-left",
-                currentConversationId === conversation.id &&
-                  "bg-accent font-semibold",
-              )}
-              onClick={() => {
-                navigate(`/home/conversation/${conversation.id}`);
-              }}
-              tabIndex={0}
-              aria-current={
-                currentConversationId === conversation.id ? "page" : undefined
-              }
-            >
-              <div className="flex w-full items-start space-x-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className={cn("text-foreground truncate font-normal")}>
-                      {conversation.title || "Untitled Conversation"}
-                    </p>
+            <div className="group/item relative">
+              <Button
+                variant="ghost"
+                className={cn(
+                  "border-border h-auto w-full justify-start rounded p-2 py-1 text-left",
+                  currentConversationId === conversation.id &&
+                    "bg-accent font-semibold",
+                )}
+                onClick={() => {
+                  navigate(`/home/conversation/${conversation.id}`);
+                }}
+                tabIndex={0}
+                aria-current={
+                  currentConversationId === conversation.id ? "page" : undefined
+                }
+              >
+                <div className="flex w-full items-start space-x-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className={cn("text-foreground truncate font-normal")}>
+                        {conversation.title || "Untitled Conversation"}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </Button>
+              </Button>
+              
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/item:opacity-100 transition-opacity h-6 w-6 p-0"
+                onClick={(e) => handleDeleteClick(conversation.id, e)}
+                aria-label="Delete conversation"
+              >
+                <Trash2 className="h-3 w-3 text-destructive" />
+              </Button>
+            </div>
           </div>
         </div>
       );
@@ -202,6 +267,27 @@ export const ConversationList = ({
           </div>
         </div>
       )}
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Conversation?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete this conversation
+              and all its messages.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

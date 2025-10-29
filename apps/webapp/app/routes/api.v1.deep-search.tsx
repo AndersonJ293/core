@@ -2,7 +2,6 @@ import { z } from "zod";
 import { json } from "@remix-run/node";
 import { createActionApiRoute } from "~/services/routeBuilders/apiBuilder.server";
 import { trackFeatureUsage } from "~/services/telemetry.server";
-import { nanoid } from "nanoid";
 import {
   deletePersonalAccessToken,
   getOrCreatePersonalAccessToken,
@@ -87,10 +86,9 @@ const { action, loader } = createActionApiRoute(
       console.error,
     );
 
-    const randomKeyName = `deepSearch_${nanoid(10)}`;
-
+    // Use a fixed token name per user to avoid creating a new token on every search
     const pat = await getOrCreatePersonalAccessToken({
-      name: randomKeyName,
+      name: "internal_deep_search_session",
       userId: authentication.userId as string,
     });
 

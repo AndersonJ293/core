@@ -39,7 +39,7 @@ export default function SingleConversation() {
   const navigate = useNavigate();
   const { conversationId } = useParams();
 
-  const { sendMessage, messages, status, stop, regenerate } = useChat({
+  const { sendMessage, messages, status, stop } = useChat({
     id: conversationId, // use the provided chat ID
     messages: conversation.ConversationHistory.map(
       (history) =>
@@ -55,13 +55,6 @@ export default function SingleConversation() {
       },
     }),
   });
-  console.log("new", messages);
-
-  React.useEffect(() => {
-    if (messages.length === 1) {
-      regenerate();
-    }
-  }, []);
 
   if (typeof window === "undefined") {
     return null;

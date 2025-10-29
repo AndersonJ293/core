@@ -18,7 +18,6 @@ import {
 
 import { getModel } from "~/lib/model.server";
 import { UserTypeEnum } from "@core/types";
-import { nanoid } from "nanoid";
 import { getOrCreatePersonalAccessToken } from "~/services/personalAccessToken.server";
 import {
   hasAnswer,
@@ -47,15 +46,18 @@ const { loader, action } = createHybridActionApiRoute(
     corsStrategy: "all",
   },
   async ({ body, authentication }) => {
-    const randomKeyName = `chat_${nanoid(10)}`;
+    // Use a fixed token name per user to avoid creating a new token on every message
     const pat = await getOrCreatePersonalAccessToken({
-      name: randomKeyName,
+      name: "internal_chat_session",
       userId: authentication.userId,
     });
 
     const message = body.message.parts[0].text;
     const id = body.message.id;
-    const apiEndpoint = `${env.APP_ORIGIN}/api/v1/mcp?source=core`;
+
+		const isDocker = env.NODE_ENV === 'production';
+    const baseUrl = isDocker ? 'http://localhost:3000' : env.APP_ORIGIN;
+    const apiEndpoint = `${baseUrl}/api/v1/mcp?source=core`;
     const url = new URL(apiEndpoint);
 
     const mcpClient = await createMCPClient({
