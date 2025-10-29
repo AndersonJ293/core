@@ -53,6 +53,49 @@ const runQuery = async (cypher: string, params = {}) => {
   }
 };
 
+const ensureVectorIndex = async (config: {
+  indexName: string;
+  label: string;
+  property: string;
+}) => {
+  const { indexName, label, property } = config;
+  
+  const existingIndexRecords = await runQuery(
+    `
+      SHOW INDEXES YIELD name, options
+      WHERE name = $indexName
+      RETURN name, options
+    `,
+    { indexName },
+  );
+
+  let shouldCreate = true;
+
+  if (existingIndexRecords.length > 0) {
+    const recordObject = existingIndexRecords[0].toObject() as {
+      options?: Record<string, unknown>;
+    };
+
+    const configuredDimensions = recordObject.options?.["vector.dimensions"];
+
+    if (String(configuredDimensions) !== String(EMBEDDING_MODEL_SIZE)) {
+      logger.info(
+        `[Neo4j] Recreating vector index ${indexName}: ${configuredDimensions} → ${EMBEDDING_MODEL_SIZE} dimensions`,
+      );
+      await runQuery(`DROP INDEX ${indexName} IF EXISTS`);
+    } else {
+      shouldCreate = false;
+    }
+  }
+
+  if (shouldCreate) {
+    await runQuery(`
+      CREATE VECTOR INDEX ${indexName} IF NOT EXISTS FOR (n:${label}) ON n.${property}
+      OPTIONS {indexConfig: {\`vector.dimensions\`: ${EMBEDDING_MODEL_SIZE}, \`vector.similarity_function\`: 'cosine', \`vector.hnsw.ef_construction\`: 400, \`vector.hnsw.m\`: 32}}
+    `);
+  }
+};
+
 // Get all nodes and relationships for a user
 export const getAllNodesForUser = async (userId: string) => {
   const session = driver.session();
@@ -112,16 +155,16 @@ export const getNodeLinks = async (userId: string) => {
 export const getClusteredGraphData = async (userId: string) => {
   const session = driver.session();
   try {
-    // Get Episode -> Entity graph, only showing entities connected to more than 1 episode
+    // Get Episode -> Entity graph, showing all entities (modified to show entities with 1+ episodes)
     const result = await session.run(
-      `// Find entities connected to more than 1 episode
-       MATCH (e:Episode{userId: $userId})-[:HAS_PROVENANCE]->(s:Statement {userId: $userId})-[r:HAS_SUBJECT|HAS_OBJECT|HAS_PREDICATE]->(entity:Entity)
+      `// Find all entities connected to episodes
+       MATCH (e:Episode{userId: $userId})-[:HAS_PROVENANCE]->(s:Statement {userId: $userId})-[r1:HAS_SUBJECT|HAS_OBJECT|HAS_PREDICATE]->(entity:Entity)
        WITH entity, count(DISTINCT e) as episodeCount
-       WHERE episodeCount > 1
+       WHERE episodeCount >= 1
        WITH collect(entity.uuid) as validEntityUuids
 
        // Build Episode -> Entity relationships for valid entities
-       MATCH (e:Episode{userId: $userId})-[r:HAS_PROVENANCE]->(s:Statement {userId: $userId})-[r:HAS_SUBJECT|HAS_OBJECT|HAS_PREDICATE]->(entity:Entity)
+       MATCH (e:Episode{userId: $userId})-[:HAS_PROVENANCE]->(s:Statement {userId: $userId})-[r:HAS_SUBJECT|HAS_OBJECT|HAS_PREDICATE]->(entity:Entity)
        WHERE entity.uuid IN validEntityUuids
        WITH DISTINCT e, entity, type(r) as relType,
             CASE WHEN size(e.spaceIds) > 0 THEN e.spaceIds[0] ELSE null END as clusterId,
@@ -312,20 +355,23 @@ const initializeSchema = async () => {
     );
 
     // Create vector indexes for semantic search (if using Neo4j 5.0+)
-    await runQuery(`
-      CREATE VECTOR INDEX entity_embedding IF NOT EXISTS FOR (n:Entity) ON n.nameEmbedding
-      OPTIONS {indexConfig: {\`vector.dimensions\`: ${EMBEDDING_MODEL_SIZE}, \`vector.similarity_function\`: 'cosine', \`vector.hnsw.ef_construction\`: 400, \`vector.hnsw.m\`: 32}}
-    `);
+    await ensureVectorIndex({
+      indexName: "entity_embedding",
+      label: "Entity",
+      property: "nameEmbedding",
+    });
 
-    await runQuery(`
-      CREATE VECTOR INDEX statement_embedding IF NOT EXISTS FOR (n:Statement) ON n.factEmbedding
-      OPTIONS {indexConfig: {\`vector.dimensions\`: ${EMBEDDING_MODEL_SIZE}, \`vector.similarity_function\`: 'cosine', \`vector.hnsw.ef_construction\`: 400, \`vector.hnsw.m\`: 32}}
-    `);
+    await ensureVectorIndex({
+      indexName: "statement_embedding",
+      label: "Statement",
+      property: "factEmbedding",
+    });
 
-    await runQuery(`
-      CREATE VECTOR INDEX episode_embedding IF NOT EXISTS FOR (n:Episode) ON n.contentEmbedding
-      OPTIONS {indexConfig: {\`vector.dimensions\`: ${EMBEDDING_MODEL_SIZE}, \`vector.similarity_function\`: 'cosine', \`vector.hnsw.ef_construction\`: 400, \`vector.hnsw.m\`: 32}}
-    `);
+    await ensureVectorIndex({
+      indexName: "episode_embedding",
+      label: "Episode",
+      property: "contentEmbedding",
+    });
 
     // Create fulltext indexes for BM25 search
     await runQuery(`
