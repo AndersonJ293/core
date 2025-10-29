@@ -1,10 +1,11 @@
 import { type CoreMessage, embed, generateText, streamText } from "ai";
 import { openai } from "@ai-sdk/openai";
-import { logger } from "~/services/logger.service";
-
 import { createOllama } from "ollama-ai-provider-v2";
 import { anthropic } from "@ai-sdk/anthropic";
 import { google } from "@ai-sdk/google";
+
+// Import env from our environment configuration
+import { env } from "~/env.server";
 
 export type ModelComplexity = "high" | "low";
 
@@ -14,7 +15,7 @@ export type ModelComplexity = "high" | "low";
  * LOW complexity automatically downgrades to cheaper variants if possible.
  */
 export function getModelForTask(complexity: ModelComplexity = "high"): string {
-  const baseModel = process.env.MODEL || "gpt-4.1-2025-04-14";
+  const baseModel = env.MODEL || "gpt-4.1-2025-04-14";
 
   // HIGH complexity - always use the configured model
   if (complexity === "high") {
@@ -47,16 +48,15 @@ export function getModelForTask(complexity: ModelComplexity = "high"): string {
 export const getModel = (takeModel?: string) => {
   let model = takeModel;
 
-  const anthropicKey = process.env.ANTHROPIC_API_KEY;
-  const googleKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  const openaiKey = process.env.OPENAI_API_KEY;
-  const openaiBaseUrl = process.env.OPENAI_BASE_URL;
-  const openaiEmbeddingsBaseUrl = process.env.OPENAI_EMBEDDINGS_BASE_URL;
-  let ollamaUrl = process.env.OLLAMA_URL;
-  model = model || process.env.MODEL || "gpt-4.1-2025-04-14";
+  const anthropicKey = env.ANTHROPIC_API_KEY;
+  const googleKey = env.GOOGLE_GENERATIVE_AI_API_KEY;
+  const openaiKey = env.OPENAI_API_KEY;
+  const openaiBaseUrl = env.OPENAI_BASE_URL;
+  let ollamaUrl = env.OLLAMA_URL;
+  model = model || env.MODEL || "gpt-4.1-2025-04-14";
 
   let modelInstance;
-  let modelTemperature = Number(process.env.MODEL_TEMPERATURE) || 1;
+  let modelTemperature = Number(env.MODEL_TEMPERATURE) || 1;
   ollamaUrl = undefined;
 
   // First check if Ollama URL exists and use Ollama
@@ -68,13 +68,13 @@ export const getModel = (takeModel?: string) => {
   } else {
     // If no Ollama, check other models
 
-    if (model.includes("claude")) {
+    if (model && model.includes("claude")) {
       if (!anthropicKey) {
         throw new Error("No Anthropic API key found. Set ANTHROPIC_API_KEY");
       }
       modelInstance = anthropic(model);
       modelTemperature = 0.5;
-    } else if (model.includes("gemini")) {
+    } else if (model && model.includes("gemini")) {
       if (!googleKey) {
         throw new Error("No Google API key found. Set GOOGLE_API_KEY");
       }
@@ -84,10 +84,14 @@ export const getModel = (takeModel?: string) => {
         throw new Error("No OpenAI API key found. Set OPENAI_API_KEY");
       }
       // Use custom baseURL if provided, otherwise use default
-      const openaiProvider = openaiBaseUrl
-        ? openai(model, { baseURL: openaiBaseUrl })
-        : openai(model);
-      modelInstance = openaiProvider;
+      // For Chutes AI and other OpenAI-compatible providers, ensure we use chat completions
+      if (openaiBaseUrl) {
+        // Force chat completions for custom base URLs (Chutes AI, etc.)
+        modelInstance = openai.chat(model, { baseURL: openaiBaseUrl });
+      } else {
+        // Use default OpenAI provider
+        modelInstance = openai(model);
+      }
     }
 
     return modelInstance;
@@ -108,7 +112,6 @@ export async function makeModelCall(
   complexity: ModelComplexity = "high",
 ) {
   let model = getModelForTask(complexity);
-  logger.info(`complexity: ${complexity}, model: ${model}`);
 
   const modelInstance = getModel(model);
   const generateTextOptions: any = {};
@@ -123,7 +126,17 @@ export async function makeModelCall(
       messages,
       ...options,
       ...generateTextOptions,
-      onFinish: async ({ text, usage }) => {
+      onFinish: async ({
+        text,
+        usage,
+      }: {
+        text: string;
+        usage?: {
+          inputTokens?: number;
+          outputTokens?: number;
+          totalTokens?: number;
+        };
+      }) => {
         const tokenUsage = usage
           ? {
               promptTokens: usage.inputTokens,
@@ -133,7 +146,7 @@ export async function makeModelCall(
           : undefined;
 
         if (tokenUsage) {
-          logger.log(
+          console.log(
             `[${complexity.toUpperCase()}] ${model} - Tokens: ${tokenUsage.totalTokens} (prompt: ${tokenUsage.promptTokens}, completion: ${tokenUsage.completionTokens})`,
           );
         }
@@ -158,7 +171,7 @@ export async function makeModelCall(
     : undefined;
 
   if (tokenUsage) {
-    logger.log(
+    console.log(
       `[${complexity.toUpperCase()}] ${model} - Tokens: ${tokenUsage.totalTokens} (prompt: ${tokenUsage.promptTokens}, completion: ${tokenUsage.completionTokens})`,
     );
   }
@@ -190,33 +203,128 @@ export function isProprietaryModel(
   return proprietaryPatterns.some((pattern) => pattern.test(model));
 }
 
-export async function getEmbedding(text: string) {
-  const ollamaUrl = process.env.OLLAMA_URL;
+interface EmbeddingRequestOptions {
+  baseUrl: string;
+  text: string;
+  apiKey?: string;
+  model?: string;
+  sendNullModelWhenMissing?: boolean;
+  maxRetries?: number;
+}
 
-  // Default to using Ollama
-  const model = process.env.EMBEDDING_MODEL;
+async function requestEmbeddingWithRetries({
+  baseUrl,
+  text,
+  apiKey,
+  model,
+  sendNullModelWhenMissing = false,
+  maxRetries = 3,
+}: EmbeddingRequestOptions): Promise<number[]> {
+  const endpoint = `${baseUrl.replace(/\/$/, "")}/embeddings`;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
 
-  if (model === "text-embedding-3-small") {
-    // Use OpenAI embedding model when explicitly requested
-    const embeddingBaseUrl = openaiEmbeddingsBaseUrl || openaiBaseUrl;
-    const embeddingProvider = embeddingBaseUrl
-      ? openai.embedding("text-embedding-3-small", { baseURL: embeddingBaseUrl })
-      : openai.embedding("text-embedding-3-small");
-    
-    const { embedding } = await embed({
-      model: embeddingProvider,
-      value: text,
-    });
-    return embedding;
+  if (apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`;
   }
 
-  const ollama = createOllama({
-    baseURL: ollamaUrl,
-  });
-  const { embedding } = await embed({
-    model: ollama.embedding(model as string),
-    value: text,
-  });
+  const payload: Record<string, unknown> = { input: text };
 
-  return embedding;
+  if (model) {
+    payload.model = model;
+  } else if (sendNullModelWhenMissing) {
+    payload.model = null;
+  }
+
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Status ${response.status}: ${errorText}`);
+      }
+
+      const data = await response.json();
+      const embedding = data?.data?.[0]?.embedding;
+
+      if (!embedding) {
+        throw new Error("Unexpected embedding response format");
+      }
+
+      return embedding;
+    } catch (error) {
+      console.error(`Embedding request to ${baseUrl} failed on attempt ${attempt}:`, error);
+      lastError = error;
+
+      if (attempt === maxRetries) {
+        throw lastError instanceof Error ? lastError : new Error(String(lastError));
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+    }
+  }
+
+  throw new Error("Embedding request failed after retries");
+}
+
+export async function getEmbedding(text: string) {
+  const ollamaUrl = env.OLLAMA_URL;
+  const openaiEmbeddingsBaseUrl = env.OPENAI_EMBEDDINGS_BASE_URL;
+  const openaiApiKey = env.OPENAI_API_KEY;
+  const model = env.EMBEDDING_MODEL;
+
+  // Try dedicated embeddings endpoint first
+  if (openaiEmbeddingsBaseUrl) {
+    try {
+      return await requestEmbeddingWithRetries({
+        baseUrl: openaiEmbeddingsBaseUrl,
+        text,
+        apiKey: openaiApiKey,
+        model,
+        sendNullModelWhenMissing: true,
+      });
+    } catch (error) {
+      console.error("Custom embedding endpoint failed after retries:", error);
+    }
+  }
+
+  // Try OpenAI SDK for specific models
+  try {
+    if (model === "text-embedding-3-small") {
+      const embeddingProvider = openai.embedding("text-embedding-3-small");
+      const { embedding } = await embed({
+        model: embeddingProvider,
+        value: text,
+      });
+      return embedding;
+    }
+  } catch (error) {
+    console.error("OpenAI SDK embedding failed:", error);
+  }
+
+  // Try Ollama
+  if (ollamaUrl) {
+    try {
+      const ollama = createOllama({
+        baseURL: ollamaUrl,
+      });
+      const { embedding } = await embed({
+        model: ollama.embedding(model as string),
+        value: text,
+      });
+      return embedding;
+    } catch (error) {
+      console.error("Ollama embedding failed:", error);
+    }
+  }
+
+  throw new Error("All embedding methods failed. Please check your configuration.");
 }
