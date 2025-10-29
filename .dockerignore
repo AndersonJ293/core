@@ -1,0 +1,47 @@
+# Git
+.git
+
+# Documentation
+README.md
+LICENSE
+
+# Environment
+.env*
+*.env
+
+# Logs
+*.log
+logs/
+
+# Coverage
+coverage/
+.nyc_output
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Cache
+.cache/
+.parcel-cache/
+.turbo/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+
+# Node modules (excluir todos os node_modules)
+**/node_modules
+node_modules

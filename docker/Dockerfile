@@ -72,4 +72,4 @@ COPY --from=builder --chown=node:node /core/scripts ./scripts
 EXPOSE 3000
 
 USER node
-CMD ["./scripts/entrypoint.sh"]
+CMD ["sh", "./scripts/entrypoint.sh"]
