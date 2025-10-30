@@ -44,8 +44,9 @@ import { runQuery } from "~/lib/neo4j.server";
 import { Apps, getNodeTypesString } from "~/utils/presets/nodes";
 import { normalizePrompt, normalizeDocumentPrompt } from "./prompts";
 import { type PrismaClient } from "@prisma/client";
+import { classificationService } from "./classification.server";
+import { assignEpisodesToSpace } from "./graphModels/space";
 
-// Default number of previous episodes to retrieve for context
 const DEFAULT_EPISODE_WINDOW = 5;
 
 export class KnowledgeGraphService {
@@ -295,6 +296,40 @@ export class KnowledgeGraphService {
         space: params.spaceId,
         sessionId: params.sessionId,
       };
+
+      try {
+        const workspaceIdFromMetadata =
+          params.metadata && (params.metadata as any).workspaceId;
+        const workspaceId = (params as any).workspaceId || workspaceIdFromMetadata;
+
+        if (!params.spaceId) {
+          const classifiedSpaceIds = await classificationService.classifyEpisode(
+            episode.uuid,
+            episode.content,
+            params.userId,
+            workspaceId,
+          );
+
+          if (Array.isArray(classifiedSpaceIds) && classifiedSpaceIds.length > 0) {
+            episode.space = classifiedSpaceIds[0];
+
+            for (const sid of classifiedSpaceIds) {
+              try {
+                await assignEpisodesToSpace([episode.uuid], sid, params.userId);
+              } catch (assignErr) {
+                logger.warn(
+                  `Failed to assign episode ${episode.uuid} to space ${sid}: ${assignErr}`,
+                );
+              }
+            }
+          }
+        }
+      } catch (classificationError) {
+        logger.warn(
+          "Episode classification/assignment failed:",
+          classificationError as Record<string, unknown>,
+        );
+      }
 
       // Step 3: Entity Extraction - Extract entities from the episode content
       const extractedNodes = await this.extractEntities(

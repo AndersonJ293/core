@@ -27,6 +27,7 @@ import { Button } from "../ui";
 import { Project } from "../icons/project";
 import { AddMemoryCommand } from "../command-bar/add-memory-command";
 import { AddMemoryDialog } from "../command-bar/memory-dialog.client";
+import { TeamSidebar } from "../teams/team-sidebar";
 
 const data = {
   navMain: [
@@ -98,6 +99,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarHeader>
         <SidebarContent>
           <NavMain items={data.navMain} />
+          <div className="mt-4 flex flex-col">
+            <TeamSidebar />
+          </div>
           <div className="mt-4 flex h-full flex-col">
             <h2 className="text-muted-foreground px-4 text-sm"> History </h2>
             <ConversationList />

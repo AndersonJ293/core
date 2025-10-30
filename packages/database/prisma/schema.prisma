@@ -484,13 +484,22 @@ model Space {
   summaryGeneratedAt        DateTime?
   contextCountAtLastTrigger Int? // Context count when pattern was last triggered
 
+  // Team-related fields
+  teamId     String? // null = personal space
+  visibility String  @default("PRIVATE") // PRIVATE, TEAM, WORKSPACE
+
   // Relations
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   workspaceId String
 
+  team Team? @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   SpacePattern SpacePattern[]
+
+  @@index([teamId])
+  @@index([visibility])
 }
 
 model SpacePattern {
@@ -558,6 +567,9 @@ model User {
   oauthAccessTokens       OAuthAccessToken[]
   oauthRefreshTokens      OAuthRefreshToken[]
   oauthClientsCreated     OAuthClient[]
+
+  // Team relations
+  teamMemberships         TeamMember[]
   oauthIntegrationGrants  OAuthIntegrationGrant[]
   oAuthClientInstallation OAuthClientInstallation[]
   UserUsage               UserUsage?
@@ -684,6 +696,46 @@ model BillingHistory {
   subscriptionId String
 }
 
+model Team {
+  id        String    @id @default(cuid())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deleted   DateTime?
+
+  name        String
+  slug        String  @unique
+  description String?
+  icon        String?
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+
+  members TeamMember[]
+  spaces  Space[]
+
+  @@index([workspaceId])
+  @@index([slug])
+}
+
+model TeamMember {
+  id        String    @id @default(cuid())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deleted   DateTime?
+
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId String
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  role String @default("MEMBER") // OWNER, ADMIN, MEMBER, VIEWER
+
+  @@unique([teamId, userId])
+  @@index([userId])
+  @@index([teamId])
+}
+
 model Workspace {
   id        String    @id @default(uuid())
   createdAt DateTime  @default(now())
@@ -714,6 +766,7 @@ model Workspace {
   Space                   Space[]
   MCPSession              MCPSession[]
   Subscription            Subscription?
+  teams                   Team[]
 }
 
 enum PlanType {

@@ -11,7 +11,10 @@
     "start": "node server.js",
     "typecheck": "tsc",
     "trigger:dev": "pnpm dlx trigger.dev@4.0.4 dev",
-    "trigger:deploy": "pnpm dlx trigger.dev@4.0.4 deploy"
+    "trigger:deploy": "pnpm dlx trigger.dev@4.0.4 deploy",
+    "seed:teams": "tsx scripts/seed-teams.ts",
+    "create:test-episodes": "tsx scripts/create-test-episodes.ts",
+    "reclassify": "tsx app/jobs/classification/reclassify-cli.ts"
   },
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "3.0.47",

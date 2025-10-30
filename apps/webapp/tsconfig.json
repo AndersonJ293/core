@@ -1,5 +1,5 @@
 {
-  "exclude": [],
+  "exclude": ["scripts/**/*"],
   "include": [
     "remix.env.d.ts",
     "global.d.ts",
