@@ -7,7 +7,7 @@ interface ScrollManagedListProps extends ListProps {
 }
 
 export const ScrollManagedList = React.forwardRef<List, ScrollManagedListProps>(
-  ({ listId, ...listProps }) => {
+  ({ listId, ...listProps }, ref) => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [scrollTop, setScrollTop] = React.useState(
       sessionStorage.getItem(`list-${listId}-scroll`),
@@ -27,6 +27,7 @@ export const ScrollManagedList = React.forwardRef<List, ScrollManagedListProps>(
 
     return (
       <List
+        ref={ref}
         {...listProps}
         height={listProps.height}
         rowHeight={listProps.rowHeight}

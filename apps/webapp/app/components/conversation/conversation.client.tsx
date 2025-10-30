@@ -1,5 +1,5 @@
 import { EditorRoot, EditorContent, Placeholder } from "novel";
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Form, useSubmit } from "@remix-run/react";
 import { cn } from "~/lib/utils";
 import { Document } from "@tiptap/extension-document";
@@ -16,7 +16,13 @@ export const ConversationNew = ({
 }) => {
   const [content, setContent] = useState("");
   const [title, setTitle] = useState("");
+  const [mounted, setMounted] = useState(false);
   const editorRef = useRef<any>(null);
+
+  useEffect(() => {
+    // Only render the editor on the client to avoid SSR hydration mismatches
+    setMounted(true);
+  }, []);
 
   const submit = useSubmit();
 
@@ -38,6 +44,15 @@ export const ConversationNew = ({
     },
     [content],
   );
+
+  // Return null on server to avoid hydration mismatch
+  if (!mounted) {
+    return (
+      <div className="h-[calc(100vh_-_56px)] pt-2 flex items-center justify-center">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <Form

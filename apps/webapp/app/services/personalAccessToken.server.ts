@@ -328,6 +328,32 @@ export async function deletePersonalAccessToken(tokenId: string) {
   });
 }
 
+export async function deletePersonalAccessTokenByName({
+  name,
+  userId,
+}: {
+  name: string;
+  userId: string;
+}) {
+  const existing = await prisma.personalAccessToken.findFirst({
+    where: {
+      name,
+      userId,
+      revokedAt: null,
+    },
+  });
+
+  if (existing) {
+    return await prisma.personalAccessToken.delete({
+      where: {
+        id: existing.id,
+      },
+    });
+  }
+
+  return null;
+}
+
 /** Created a new PersonalAccessToken, and return the token. We only ever return the unencrypted token once. */
 export async function createPersonalAccessToken({
   name,
