@@ -31,4 +31,12 @@ export const FIXED_INTEGRATIONS = [
     slug: "vscode",
     spec: {},
   },
+  {
+    id: "droid",
+    name: "Factory CLI",
+    description: "AI-powered code editor and development assistant",
+    icon: "terminal",
+    slug: "droid",
+    spec: {},
+  },
 ];
