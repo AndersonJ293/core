@@ -488,6 +488,9 @@ model Space {
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   workspaceId String
 
+  team   Team?  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId String?
+
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   SpacePattern SpacePattern[]
@@ -562,6 +565,7 @@ model User {
   oAuthClientInstallation OAuthClientInstallation[]
   UserUsage               UserUsage?
   RecallLog               RecallLog[]
+  TeamMember              TeamMember[]
 }
 
 model UserUsage {
@@ -714,6 +718,7 @@ model Workspace {
   Space                   Space[]
   MCPSession              MCPSession[]
   Subscription            Subscription?
+  Team                    Team[]
 }
 
 enum PlanType {
@@ -753,4 +758,49 @@ enum UserType {
 enum WebhookDeliveryStatus {
   SUCCESS
   FAILED
+}
+
+model Team {
+  id        String    @id @default(cuid())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deleted   DateTime?
+
+  name        String
+  slug        String  @unique
+  description String?
+  icon        String?
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+
+  members TeamMember[]
+  spaces  Space[]
+
+  @@index([workspaceId])
+  @@index([slug])
+}
+
+model TeamMember {
+  id        String    @id @default(cuid())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deleted   DateTime?
+
+  role TeamRole
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId String
+
+  @@unique([userId, teamId])
+  @@index([teamId])
+}
+
+enum TeamRole {
+  OWNER
+  ADMIN
+  MEMBER
 }
