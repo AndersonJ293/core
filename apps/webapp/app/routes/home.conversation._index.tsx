@@ -18,6 +18,7 @@ import {
 } from "~/services/conversation.server";
 
 import { PageHeader } from "~/components/common/page-header";
+import { useEffect, useState } from "react";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   // Only return userId, not the heavy nodeLinks
@@ -64,11 +65,16 @@ export async function action({ request }: ActionFunctionArgs) {
 
 export default function Chat() {
   const { user } = useTypedLoaderData<typeof loader>();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <>
       <PageHeader title="Conversation" />
-      {typeof window !== "undefined" && <ConversationNew user={user} />}
+      {mounted && <ConversationNew user={user} />}
     </>
   );
 }

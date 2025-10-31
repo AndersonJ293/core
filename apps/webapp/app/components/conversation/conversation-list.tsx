@@ -13,7 +13,23 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "../ui/alert-dialog";
+} from "~/components/ui/alert-dialog";
+import { type ConversationItem } from "~/services/conversation.server";
+
+/**
+ * Strip HTML tags from a string and decode HTML entities
+ */
+function stripHtml(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, '') // Remove HTML tags
+    .replace(/&nbsp;/g, ' ') // Replace &nbsp; with space
+    .replace(/&lt;/g, '<')   // Decode HTML entities
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .trim();
+}
 
 type ConversationItem = {
   id: string;
@@ -57,8 +73,9 @@ export const ConversationList = ({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [conversationToDelete, setConversationToDelete] = useState<string | null>(null);
 
-  // Prevent duplicate conversations when paginating
   const loadedConversationIds = useRef<Set<string>>(new Set());
+  const listRef = useRef<List>(null);
+  const lastDeletedIdRef = useRef<string | null>(null);
 
   const loadMoreConversations = useCallback(
     (page: number) => {
@@ -83,27 +100,50 @@ export const ConversationList = ({
 
   // Handle delete success
   useEffect(() => {
-    if (deleteFetcher.data && deleteFetcher.state === "idle") {
-      if (conversationToDelete) {
-        // Remove from local state
-        setConversations((prev) => 
-          prev.filter((c) => c.id !== conversationToDelete)
-        );
-        loadedConversationIds.current.delete(conversationToDelete);
-        
-        // If it was the current conversation, redirect to conversation list
-        if (currentConversationId === conversationToDelete) {
-          navigate("/home/conversation");
-        }
-        
-        setConversationToDelete(null);
+    if (
+      deleteFetcher.state === "idle" &&
+      conversationToDelete &&
+      deleteFetcher.data?.success &&
+      lastDeletedIdRef.current !== conversationToDelete // Only process if not already processed
+    ) {
+      // Mark this as processed
+      lastDeletedIdRef.current = conversationToDelete;
+
+      // Remove from local state
+      setConversations((prev) =>
+        prev.filter((c) => c.id !== conversationToDelete)
+      );
+      loadedConversationIds.current.delete(conversationToDelete);
+
+      // Force list to re-render with new data
+      // Call multiple times to ensure virtual list updates correctly
+      if (listRef.current) {
+        listRef.current.forceUpdateGrid();
+        // Second call after a micro-task to ensure DOM has updated
+        setTimeout(() => {
+          if (listRef.current) {
+            listRef.current.forceUpdateGrid();
+          }
+        }, 0);
       }
+
+      // If it was the current conversation, redirect to conversation list
+      if (currentConversationId === conversationToDelete) {
+        navigate("/home/conversation");
+      }
+
+      // Close dialog and reset state
+      setDeleteDialogOpen(false);
+      setConversationToDelete(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deleteFetcher.data, deleteFetcher.state, conversationToDelete]);
+  }, [deleteFetcher.data, deleteFetcher.state, conversationToDelete, currentConversationId]);
 
   const handleDeleteClick = (conversationId: string, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent navigation
+    // Reset last deleted ref and clear stale fetcher data when opening new dialog
+    lastDeletedIdRef.current = null;
+    deleteFetcher.data = undefined;
     setConversationToDelete(conversationId);
     setDeleteDialogOpen(true);
   };
@@ -117,8 +157,8 @@ export const ConversationList = ({
           action: `/api/v1/conversation/${conversationToDelete}/delete`,
         }
       );
+      // Don't close dialog immediately - let the useEffect handle it after success
     }
-    setDeleteDialogOpen(false);
   };
 
   // Handle fetcher response
@@ -209,13 +249,13 @@ export const ConversationList = ({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <p className={cn("text-foreground truncate font-normal")}>
-                        {conversation.title || "Untitled Conversation"}
+                        {stripHtml(conversation.title) || "Untitled Conversation"}
                       </p>
                     </div>
                   </div>
                 </div>
               </Button>
-              
+
               <Button
                 variant="ghost"
                 size="sm"
@@ -248,6 +288,7 @@ export const ConversationList = ({
           <AutoSizer>
             {({ height, width }) => (
               <List
+                ref={listRef}
                 height={height}
                 width={width}
                 rowCount={rowCount}
@@ -278,12 +319,22 @@ export const ConversationList = ({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteFetcher.state === "submitting"}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteConfirm}
+              disabled={deleteFetcher.state === "submitting"}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Delete
+              {deleteFetcher.state === "submitting" ? (
+                <span className="flex items-center gap-2">
+                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                  Deleting...
+                </span>
+              ) : (
+                "Delete"
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

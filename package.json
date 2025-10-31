@@ -22,8 +22,10 @@
     "trigger:deploy": "dotenv -- turbo run trigger:deploy"
   },
   "devDependencies": {
+    "cross-env": "^7.0.3",
     "dotenv-cli": "^7.4.4",
     "prettier": "^3.5.3",
+    "tsx": "^4.20.6",
     "turbo": "^2.5.3",
     "typescript": "5.5.4"
   },

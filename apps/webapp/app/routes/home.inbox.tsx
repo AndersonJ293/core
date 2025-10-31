@@ -19,6 +19,7 @@ export default function LogsAll() {
   const [selectedStatus, setSelectedStatus] = useState<string | undefined>();
   const [selectedType, setSelectedType] = useState<string | undefined>();
   const [onboarding, setOnboarding] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   const { logId } = useParams();
 
@@ -37,10 +38,25 @@ export default function LogsAll() {
   });
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
     if (!isLoading && logs && logs.length === 1) {
       setOnboarding(true);
     }
   }, [logs.length, isLoading]);
+
+  if (!mounted) {
+    return (
+      <>
+        <PageHeader title="Inbox" />
+        <div className="flex h-[calc(100vh_-_56px)] w-full items-center justify-center">
+          <LoaderCircle className="text-primary h-4 w-4 animate-spin" />
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
