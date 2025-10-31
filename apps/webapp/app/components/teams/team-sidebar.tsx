@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Link } from "@remix-run/react";
+import { Link, useFetcher } from "@remix-run/react";
 
 type Team = {
   id: string;
@@ -22,51 +22,35 @@ export function TeamSidebar({
   selectedTeamId,
   onSelect,
   compact = false,
-  className = "",
+  className,
 }: Props) {
+  const fetcher = useFetcher();
   const [teams, setTeams] = useState<Team[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let mounted = true;
-    setLoading(true);
-    setError(null);
-
-    fetch("/api/v1/teams", {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
-      credentials: "same-origin",
-    })
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error(`Failed to load teams (${res.status})`);
-        }
-        return res.json();
-      })
-      .then((data) => {
-        if (!mounted) return;
-        if (data?.teams && Array.isArray(data.teams)) {
-          setTeams(data.teams);
-        } else {
-          setTeams([]);
-        }
-      })
-      .catch((err: any) => {
-        if (!mounted) return;
-        setError(err?.message || "Unknown error fetching teams");
-        setTeams([]);
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
+    fetcher.load("/api/v1/teams");
   }, []);
+
+  useEffect(() => {
+    if (fetcher.state === "loading") {
+      setLoading(true);
+      setError(null);
+    } else if (fetcher.state === "idle") {
+      setLoading(false);
+      
+      if (fetcher.data?.teams && Array.isArray(fetcher.data.teams)) {
+        setTeams(fetcher.data.teams);
+        setError(null);
+      } else if (fetcher.data?.error) {
+        setError(typeof fetcher.data.error === "string" ? fetcher.data.error : "Failed to load teams");
+        setTeams([]);
+      } else {
+        setTeams([]);
+      }
+    }
+  }, [fetcher.state, fetcher.data]);
 
   const handleSelect = (teamId: string) => {
     if (onSelect) onSelect(teamId);
@@ -206,7 +190,6 @@ export function TeamSidebar({
             );
           })}
         </ul>
-      </div>
     </aside>
   );
 }
