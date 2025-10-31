@@ -199,7 +199,7 @@ export const ConversationList = ({
               variant="link"
               onClick={() => loadMoreConversations(currentPage + 1)}
               disabled={isLoading}
-              className="w-fit underline underline-offset-4"
+              className="w-fit underline underline-offset-4 cursor-pointer"
             >
               {isLoading ? (
                 <>
@@ -233,7 +233,7 @@ export const ConversationList = ({
               <Button
                 variant="ghost"
                 className={cn(
-                  "border-border h-auto w-full justify-start rounded p-2 py-1 text-left",
+                  "border-border h-auto w-full justify-start rounded p-2 py-1 text-left cursor-pointer",
                   currentConversationId === conversation.id &&
                     "bg-accent font-semibold",
                 )}
@@ -259,7 +259,7 @@ export const ConversationList = ({
               <Button
                 variant="ghost"
                 size="sm"
-                className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/item:opacity-100 transition-opacity h-6 w-6 p-0"
+                className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/item:opacity-100 transition-opacity h-6 w-6 p-0 cursor-pointer"
                 onClick={(e) => handleDeleteClick(conversation.id, e)}
                 aria-label="Delete conversation"
               >

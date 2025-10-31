@@ -89,7 +89,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 variant="secondary"
                 isActive
                 size="sm"
-                className="rounded"
+                className="rounded cursor-pointer"
                 onClick={() => setShowAddMemory(true)}
               >
                 <Plus size={16} />

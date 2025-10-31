@@ -1,5 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { Link, useFetcher } from "@remix-run/react";
+import { Plus } from "lucide-react";
+import { cn } from "~/lib/utils";
+import {
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuItem,
+} from "../ui/sidebar";
+import { Button } from "../ui";
 
 type Team = {
   id: string;
@@ -15,14 +24,12 @@ type Props = {
   selectedTeamId?: string | null;
   onSelect?: (teamId: string) => void;
   compact?: boolean;
-  className?: string;
 };
 
 export function TeamSidebar({
   selectedTeamId,
   onSelect,
   compact = false,
-  className,
 }: Props) {
   const fetcher = useFetcher();
   const [teams, setTeams] = useState<Team[]>([]);
@@ -57,139 +64,71 @@ export function TeamSidebar({
   };
 
   return (
-    <aside
-      aria-label="Teams"
-      className={className}
-      style={{ display: "flex", flexDirection: "column", gap: 8 }}
-    >
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 4px" }}>
-        <strong style={{ fontSize: 14 }}>Teams</strong>
-        <Link
-          to="/teams/new"
-          style={{
-            fontSize: 13,
-            color: "#6366f1",
-            textDecoration: "none",
-            fontWeight: 500
-          }}
-        >
-          + New
-        </Link>
-      </div>
+    <SidebarGroup>
+      <SidebarGroupContent className="flex flex-col gap-2">
+        <div className="flex items-center justify-between px-1">
+          <h2 className="text-sm font-medium text-foreground">Teams</h2>
+          <Link to="/teams/new">
+            <Button
+              variant="secondary"
+              isActive
+              size="sm"
+              className="rounded cursor-pointer"
+            >
+              <Plus size={16} />
+            </Button>
+          </Link>
+        </div>
 
-      {loading && <div style={{ fontSize: 13, color: "#9ca3af", padding: "8px 4px" }}>Loading…</div>}
-      {error && <div style={{ fontSize: 13, color: "#ef4444", padding: "8px 4px" }}>{error}</div>}
+        {loading && (
+          <div className="text-muted-foreground text-sm px-1">Loading…</div>
+        )}
+        {error && (
+          <div className="text-destructive text-sm px-1">{error}</div>
+        )}
 
-      {!loading && teams.length === 0 && !error && (
-        <div style={{ fontSize: 13, color: "#9ca3af", padding: "8px 4px" }}>No teams yet</div>
-      )}
+        {!loading && teams.length === 0 && !error && (
+          <div className="text-muted-foreground text-sm px-1">No teams yet</div>
+        )}
 
-        <ul
-          style={{
-            listStyle: "none",
-            padding: 0,
-            margin: 0,
-            display: "flex",
-            flexDirection: "column",
-            gap: 6,
-          }}
-        >
+        <SidebarMenu className="gap-0.5">
           {teams.map((team) => {
             const isSelected = team.id === selectedTeamId;
             return (
-              <li key={team.id}>
-                <button
+              <SidebarMenuItem key={team.id}>
+                <Button
+                  isActive={isSelected}
+                  className={cn(
+                    "bg-grayAlpha-100 text-foreground w-fit gap-1 !rounded-md cursor-pointer",
+                    isSelected && "!bg-accent !text-accent-foreground",
+                  )}
                   onClick={() => handleSelect(team.id)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    width: "100%",
-                    textAlign: "left",
-                    padding: "8px 10px",
-                    borderRadius: 8,
-                    background: isSelected ? "#f3f4f6" : "transparent",
-                    border: "none",
-                    cursor: "pointer",
-                    transition: "background 0.15s",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isSelected) e.currentTarget.style.background = "#f9fafb";
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isSelected) e.currentTarget.style.background = "transparent";
-                  }}
-                  aria-current={isSelected ? "true" : undefined}
+                  variant="ghost"
                 >
-                  <span
-                    style={{
-                      width: 32,
-                      height: 32,
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      borderRadius: 6,
-                      background: "#eef2f7",
-                      fontSize: 16,
-                      flexShrink: 0,
-                    }}
-                    aria-hidden
-                  >
+                  <span className="flex h-6 w-6 items-center justify-center rounded bg-muted text-xs">
                     {team.icon || "👥"}
                   </span>
-
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        justifyContent: "space-between",
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: 14,
-                          fontWeight: 600,
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
-                      >
+                  <div className="flex flex-1 flex-col min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="truncate text-sm font-medium">
                         {team.name}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 12,
-                          color: "#9ca3af",
-                          minWidth: 30,
-                          textAlign: "right",
-                        }}
-                      >
+                      </span>
+                      <span className="text-muted-foreground text-xs">
                         {Number(team.memberCount || 0)}
-                      </div>
+                      </span>
                     </div>
-
-                    {!compact && team.description ? (
-                      <div
-                        style={{
-                          fontSize: 12,
-                          color: "#9ca3af",
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          marginTop: 2,
-                        }}
-                      >
+                    {!compact && team.description && (
+                      <span className="text-muted-foreground text-xs truncate">
                         {team.description}
-                      </div>
-                    ) : null}
+                      </span>
+                    )}
                   </div>
-                </button>
-              </li>
+                </Button>
+              </SidebarMenuItem>
             );
           })}
-        </ul>
-    </aside>
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
   );
 }

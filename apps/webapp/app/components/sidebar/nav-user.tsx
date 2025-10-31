@@ -22,7 +22,7 @@ export function NavUser({ user }: { user: ExtendedUser }) {
       <SidebarMenuItem className="flex justify-between">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="link" className="mb-2 ml-2 gap-2 px-0">
+            <Button variant="link" className="mb-2 ml-2 gap-2 px-0 cursor-pointer">
               <AvatarText
                 text={user.name ?? "User"}
                 className="h-6 w-6 rounded"
@@ -52,14 +52,14 @@ export function NavUser({ user }: { user: ExtendedUser }) {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              className="flex gap-2"
+              className="flex gap-2 cursor-pointer"
               onClick={() => navigate("/settings/account")}
             >
               <Settings size={16} />
               Settings
             </DropdownMenuItem>
             <DropdownMenuItem
-              className="flex gap-2"
+              className="flex gap-2 cursor-pointer"
               onClick={() => navigate("/logout")}
             >
               <LogOut size={16} />
@@ -70,6 +70,7 @@ export function NavUser({ user }: { user: ExtendedUser }) {
 
         <Button
           variant="ghost"
+          className="cursor-pointer"
           onClick={() => {
             navigate("/settings/billing");
           }}
