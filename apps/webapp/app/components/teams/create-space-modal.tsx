@@ -106,7 +106,7 @@ export function CreateSpaceModal({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] p-6">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Create New Space</DialogTitle>
@@ -124,14 +124,15 @@ export function CreateSpaceModal({
 
             <div className="grid gap-2">
               <Label htmlFor="space-icon">Icon</Label>
-              <Input
+              <input
                 id="space-icon"
+                type="text"
                 value={icon}
                 onChange={(e) => setIcon(e.target.value)}
                 placeholder="📁"
                 maxLength={2}
                 disabled={loading}
-                className="w-20"
+                className="w-20 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
@@ -139,66 +140,52 @@ export function CreateSpaceModal({
               <Label htmlFor="space-name">
                 Name <span className="text-destructive">*</span>
               </Label>
-              <Input
+              <input
                 id="space-name"
+                type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Engineering Notes"
                 maxLength={100}
                 required
                 disabled={loading}
+                className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
             <div className="grid gap-2">
               <Label htmlFor="space-description">Description</Label>
-              <Textarea
+              <textarea
                 id="space-description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="A space for engineering team documentation and technical notes"
                 rows={3}
                 disabled={loading}
+                className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
               />
             </div>
 
             <div className="grid gap-2">
               <Label htmlFor="space-visibility">Visibility</Label>
-              <Select
+              <select
+                id="space-visibility"
                 value={visibility}
-                onValueChange={(value: any) => setVisibility(value)}
+                onChange={(e) => setVisibility(e.target.value)}
                 disabled={loading}
+                className="w-full px-3 py-2 h-12 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
               >
-                <SelectTrigger id="space-visibility">
-                  <SelectValue placeholder="Select visibility" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="TEAM">
-                    <div className="flex flex-col items-start">
-                      <span className="font-medium">Team</span>
-                      <span className="text-muted-foreground text-xs">
-                        All team members can access
-                      </span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="PRIVATE">
-                    <div className="flex flex-col items-start">
-                      <span className="font-medium">Private</span>
-                      <span className="text-muted-foreground text-xs">
-                        Only you can access
-                      </span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="WORKSPACE">
-                    <div className="flex flex-col items-start">
-                      <span className="font-medium">Workspace</span>
-                      <span className="text-muted-foreground text-xs">
-                        Everyone in workspace can access
-                      </span>
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+                <option value="">Select visibility</option>
+                <option value="TEAM">
+                  Team - All team members can access
+                </option>
+                <option value="PRIVATE">
+                  Private - Only you can access
+                </option>
+                <option value="WORKSPACE">
+                  Workspace - All workspace members can access
+                </option>
+              </select>
             </div>
           </div>
 
@@ -208,10 +195,15 @@ export function CreateSpaceModal({
               variant="outline"
               onClick={handleClose}
               disabled={loading}
+              className="cursor-pointer"
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button
+              type="submit"
+              disabled={loading}
+              className="cursor-pointer"
+            >
               {loading ? "Creating..." : "Create Space"}
             </Button>
           </DialogFooter>

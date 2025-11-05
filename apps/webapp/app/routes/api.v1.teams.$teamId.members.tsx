@@ -2,10 +2,10 @@ import { z } from "zod";
 import { json } from "@remix-run/node";
 import {
   createHybridActionApiRoute,
-  createHybridLoaderApiRoute,
 } from "~/services/routeBuilders/apiBuilder.server";
 import { prisma } from "~/db.server";
 import { permissionService } from "~/services/permission.server";
+import { requireUser } from "~/services/session.server";
 import { logger } from "~/services/logger.service";
 
 // Schema for inviting members
@@ -172,80 +172,72 @@ const { action } = createHybridActionApiRoute(
 );
 
 // GET /api/v1/teams/:teamId/members - List team members
-const { loader } = createHybridLoaderApiRoute(
-  {
-    allowJWT: true,
-    corsStrategy: "all",
-    findResource: async () => 1,
-  },
-  async ({ authentication, params }) => {
-    try {
-      const userId = authentication.userId;
-      const { teamId } = params;
+export const loader = async ({ params, request }) => {
+  try {
+    const user = await requireUser(request);
+    const { teamId } = params;
 
-      if (!teamId) {
-        return json({ error: "Team ID is required" }, { status: 400 });
-      }
-
-      // Check if user can view this team
-      const canView = await permissionService.canPerformTeamAction(
-        userId,
-        teamId,
-        "view",
-      );
-
-      if (!canView) {
-        return json(
-          { error: "You don't have permission to view this team" },
-          { status: 403 },
-        );
-      }
-
-      // Get team members
-      const members = await prisma.teamMember.findMany({
-        where: {
-          teamId,
-          deleted: null,
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-        },
-        orderBy: [
-          { role: "asc" }, // OWNER first
-          { createdAt: "asc" },
-        ],
-      });
-
-      return json({
-        members: members.map((member) => ({
-          id: member.id,
-          role: member.role,
-          userId: member.userId,
-          teamId: member.teamId,
-          user: {
-            id: member.user.id,
-            name: member.user.name,
-            email: member.user.email,
-          },
-          createdAt: member.createdAt,
-          updatedAt: member.updatedAt,
-        })),
-        success: true,
-      });
-    } catch (error) {
-      logger.error(
-        "Error fetching team members:",
-        error as Record<string, unknown>,
-      );
-      return json({ error: "Failed to fetch members" }, { status: 500 });
+    if (!teamId) {
+      return json({ error: "Team ID is required" }, { status: 400 });
     }
-  },
-);
 
-export { action, loader };
+    // Check if user is team member
+    const membership = await prisma.teamMember.findFirst({
+      where: {
+        teamId,
+        userId: user.id,
+        deleted: null,
+      },
+    });
+
+    if (!membership) {
+      return json(
+        { error: "You don't have permission to view this team" },
+        { status: 403 },
+      );
+    }
+
+    // Get team members
+    const members = await prisma.teamMember.findMany({
+      where: {
+        teamId,
+        deleted: null,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: [
+        { role: "asc" }, // OWNER first
+        { createdAt: "asc" },
+      ],
+    });
+
+    return json({
+      members: members.map((member) => ({
+        id: member.id,
+        role: member.role,
+        userId: member.userId,
+        teamId: member.teamId,
+        user: {
+          id: member.user.id,
+          name: member.user.name,
+          email: member.user.email,
+        },
+        createdAt: member.createdAt,
+        updatedAt: member.updatedAt,
+      })),
+      success: true,
+    });
+  } catch (error) {
+    logger.error("Error fetching team members:", error);
+    return json({ error: "Failed to fetch members" }, { status: 500 });
+  }
+};
+
+export { action };

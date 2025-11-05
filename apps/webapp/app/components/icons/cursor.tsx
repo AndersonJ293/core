@@ -33,8 +33,8 @@ export function Cursor({ size = 18, className }: IconProps) {
           y1="12"
           y2="24"
         >
-          <stop offset=".16" stop-color="#000" stop-opacity=".39"></stop>
-          <stop offset=".658" stop-color="#000" stop-opacity=".8"></stop>
+          <stop offset=".16" stopColor="#000" stopOpacity=".39"></stop>
+          <stop offset=".658" stopColor="#000" stopOpacity=".8"></stop>
         </linearGradient>
         <linearGradient
           gradientUnits="userSpaceOnUse"
@@ -44,8 +44,8 @@ export function Cursor({ size = 18, className }: IconProps) {
           y1="6.037"
           y2="12.15"
         >
-          <stop offset=".182" stop-color="#000" stop-opacity=".31"></stop>
-          <stop offset=".715" stop-color="#000" stop-opacity="0"></stop>
+          <stop offset=".182" stopColor="#000" stopOpacity=".31"></stop>
+          <stop offset=".715" stopColor="#000" stopOpacity="0"></stop>
         </linearGradient>
         <linearGradient
           gradientUnits="userSpaceOnUse"
@@ -55,8 +55,8 @@ export function Cursor({ size = 18, className }: IconProps) {
           y1="0"
           y2="18"
         >
-          <stop stop-color="#000" stop-opacity=".6"></stop>
-          <stop offset=".667" stop-color="#000" stop-opacity=".22"></stop>
+          <stop stopColor="#000" stopOpacity=".6"></stop>
+          <stop offset=".667" stopColor="#000" stopOpacity=".22"></stop>
         </linearGradient>
       </defs>
     </svg>

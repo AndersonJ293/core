@@ -22,16 +22,14 @@ type Team = {
 
 type Props = {
   selectedTeamId?: string | null;
-  onSelect?: (teamId: string) => void;
   compact?: boolean;
 };
 
 export function TeamSidebar({
   selectedTeamId,
-  onSelect,
   compact = false,
 }: Props) {
-  const fetcher = useFetcher();
+  const fetcher = useFetcher<{ teams: Team[]; success: boolean }>();
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,12 +44,16 @@ export function TeamSidebar({
       setError(null);
     } else if (fetcher.state === "idle") {
       setLoading(false);
-      
+
       if (fetcher.data?.teams && Array.isArray(fetcher.data.teams)) {
         setTeams(fetcher.data.teams);
         setError(null);
       } else if (fetcher.data?.error) {
-        setError(typeof fetcher.data.error === "string" ? fetcher.data.error : "Failed to load teams");
+        setError(
+          typeof fetcher.data.error === "string"
+            ? fetcher.data.error
+            : "Failed to load teams",
+        );
         setTeams([]);
       } else {
         setTeams([]);
@@ -59,21 +61,17 @@ export function TeamSidebar({
     }
   }, [fetcher.state, fetcher.data]);
 
-  const handleSelect = (teamId: string) => {
-    if (onSelect) onSelect(teamId);
-  };
-
   return (
     <SidebarGroup>
       <SidebarGroupContent className="flex flex-col gap-2">
         <div className="flex items-center justify-between px-1">
-          <h2 className="text-sm font-medium text-foreground">Teams</h2>
+          <h2 className="text-foreground text-sm font-medium">Teams</h2>
           <Link to="/home/teams/new">
             <Button
               variant="secondary"
               isActive
               size="sm"
-              className="rounded cursor-pointer"
+              className="cursor-pointer rounded"
             >
               <Plus size={16} />
             </Button>
@@ -81,14 +79,12 @@ export function TeamSidebar({
         </div>
 
         {loading && (
-          <div className="text-muted-foreground text-sm px-1">Loading…</div>
+          <div className="text-muted-foreground px-1 text-sm">Loading…</div>
         )}
-        {error && (
-          <div className="text-destructive text-sm px-1">{error}</div>
-        )}
+        {error && <div className="text-destructive px-1 text-sm">{error}</div>}
 
         {!loading && teams.length === 0 && !error && (
-          <div className="text-muted-foreground text-sm px-1">No teams yet</div>
+          <div className="text-muted-foreground px-1 text-sm">No teams yet</div>
         )}
 
         <SidebarMenu className="gap-0.5">
@@ -97,32 +93,24 @@ export function TeamSidebar({
             return (
               <SidebarMenuItem key={team.id}>
                 <Button
-                  isActive={isSelected}
+                  variant="ghost"
                   className={cn(
-                    "bg-grayAlpha-100 text-foreground w-fit gap-1 !rounded-md cursor-pointer",
+                    "bg-grayAlpha-100 text-foreground cursor-pointer gap-1 !rounded-md flex items-center hover:bg-accent hover:text-accent-foreground transition-colors",
                     isSelected && "!bg-accent !text-accent-foreground",
                   )}
-                  onClick={() => handleSelect(team.id)}
-                  variant="ghost"
+                  onClick={() => {
+                    const currentPath = window.location.pathname;
+                    if (currentPath !== `/home/teams/${team.id}`) {
+                      window.location.href = `/home/teams/${team.id}`;
+                    }
+                  }}
                 >
-                  <span className="flex h-6 w-6 items-center justify-center rounded bg-muted text-xs">
+                  <span className="flex h-4 w-4 items-start justify-center rounded text-xs leading-none">
                     {team.icon || "👥"}
                   </span>
-                  <div className="flex flex-1 flex-col min-w-0">
-                    <div className="flex items-center justify-between">
-                      <span className="truncate text-sm font-medium">
-                        {team.name}
-                      </span>
-                      <span className="text-muted-foreground text-xs">
-                        {Number(team.memberCount || 0)}
-                      </span>
-                    </div>
-                    {!compact && team.description && (
-                      <span className="text-muted-foreground text-xs truncate">
-                        {team.description}
-                      </span>
-                    )}
-                  </div>
+                  <span className="truncate text-sm">
+                    {team.name}
+                  </span>
                 </Button>
               </SidebarMenuItem>
             );

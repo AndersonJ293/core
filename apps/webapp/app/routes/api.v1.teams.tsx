@@ -11,13 +11,17 @@ import { logger } from "~/services/logger.service";
 // Schema for creating teams
 const CreateTeamSchema = z.object({
   name: z.string().min(1).max(100),
-  slug: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/),
+  slug: z
+    .string()
+    .min(1)
+    .max(100)
+    .regex(/^[a-z0-9-]+$/),
   description: z.string().optional(),
   icon: z.string().optional().default("👥"),
 });
 
 // GET /api/v1/teams - List user's teams
-const { loader } = createHybridLoaderApiRoute(
+const loader = createHybridLoaderApiRoute(
   {
     allowJWT: true,
     corsStrategy: "all",
@@ -35,10 +39,7 @@ const { loader } = createHybridLoaderApiRoute(
       });
 
       if (!user?.Workspace?.id) {
-        return json(
-          { error: "Workspace not found" },
-          { status: 404 },
-        );
+        return json({ error: "Workspace not found" }, { status: 404 });
       }
 
       // Get all teams where user is a member
@@ -80,12 +81,9 @@ const { loader } = createHybridLoaderApiRoute(
     } catch (error) {
       logger.error(
         "Error fetching teams:",
-        error as Record<string, unknown>,
+        error instanceof Error ? error.message : "Unknown error",
       );
-      return json(
-        { error: "Failed to fetch teams" },
-        { status: 500 },
-      );
+      return json({ error: "Failed to fetch teams" }, { status: 500 });
     }
   },
 );
@@ -116,10 +114,7 @@ const { action } = createHybridActionApiRoute(
       });
 
       if (!user?.Workspace?.id) {
-        return json(
-          { error: "Workspace not found" },
-          { status: 404 },
-        );
+        return json({ error: "Workspace not found" }, { status: 404 });
       }
 
       // Check if slug already exists in workspace
@@ -167,9 +162,7 @@ const { action } = createHybridActionApiRoute(
         },
       });
 
-      logger.info(
-        `Team ${team.id} created by user ${authentication.userId}`,
-      );
+      logger.info(`Team ${team.id} created by user ${authentication.userId}`);
 
       return json({
         team: {
@@ -200,12 +193,9 @@ const { action } = createHybridActionApiRoute(
     } catch (error) {
       logger.error(
         "Error creating team:",
-        error as Record<string, unknown>,
+        error instanceof Error ? error.message : "Unknown error",
       );
-      return json(
-        { error: "Failed to create team" },
-        { status: 500 },
-      );
+      return json({ error: "Failed to create team" }, { status: 500 });
     }
   },
 );

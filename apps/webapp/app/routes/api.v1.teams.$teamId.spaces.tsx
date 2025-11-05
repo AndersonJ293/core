@@ -6,6 +6,7 @@ import {
 } from "~/services/routeBuilders/apiBuilder.server";
 import { prisma } from "~/db.server";
 import { permissionService } from "~/services/permission.server";
+import { requireUser } from "~/services/session.server";
 import { logger } from "~/services/logger.service";
 
 // Schema for creating spaces
@@ -99,68 +100,59 @@ const { action } = createHybridActionApiRoute(
 );
 
 // GET /api/v1/teams/:teamId/spaces - List team spaces
-const { loader } = createHybridLoaderApiRoute(
-  {
-    allowJWT: true,
-    corsStrategy: "all",
-    findResource: async () => 1,
-  },
-  async ({ authentication, params }) => {
-    try {
-      const userId = authentication.userId;
-      const { teamId } = params;
+export const loader = async ({ params, request }) => {
+  try {
+    const user = await requireUser(request);
+    const { teamId } = params;
 
-      if (!teamId) {
-        return json({ error: "Team ID is required" }, { status: 400 });
-      }
-
-      // Check if user can view this team
-      const canView = await permissionService.canPerformTeamAction(
-        userId,
-        teamId,
-        "view",
-      );
-
-      if (!canView) {
-        return json(
-          { error: "You don't have permission to view this team" },
-          { status: 403 },
-        );
-      }
-
-      // Get team spaces
-      const spaces = await prisma.space.findMany({
-        where: {
-          teamId,
-          deleted: null,
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-      });
-
-      return json({
-        spaces: spaces.map((space) => ({
-          id: space.id,
-          name: space.name,
-          description: space.description,
-          visibility: space.visibility,
-          icon: space.icon,
-          teamId: space.teamId,
-          workspaceId: space.workspaceId,
-          createdAt: space.createdAt,
-          updatedAt: space.updatedAt,
-        })),
-        success: true,
-      });
-    } catch (error) {
-      logger.error(
-        "Error fetching team spaces:",
-        error as Record<string, unknown>,
-      );
-      return json({ error: "Failed to fetch spaces" }, { status: 500 });
+    if (!teamId) {
+      return json({ error: "Team ID is required" }, { status: 400 });
     }
-  },
-);
 
-export { action, loader };
+    // Check if user is team member
+    const membership = await prisma.teamMember.findFirst({
+      where: {
+        teamId,
+        userId: user.id,
+        deleted: null,
+      },
+    });
+
+    if (!membership) {
+      return json(
+        { error: "You don't have permission to view this team" },
+        { status: 403 },
+      );
+    }
+
+    // Get team spaces
+    const spaces = await prisma.space.findMany({
+      where: {
+        teamId,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    return json({
+      spaces: spaces.map((space) => ({
+        id: space.id,
+        name: space.name,
+        description: space.description,
+        visibility: space.visibility,
+        icon: space.icon,
+        teamId: space.teamId,
+        workspaceId: space.workspaceId,
+        createdAt: space.createdAt,
+        updatedAt: space.updatedAt,
+      })),
+      success: true,
+    });
+  } catch (error) {
+    logger.error("Error fetching team spaces:", error);
+    return json({ error: "Failed to fetch spaces" }, { status: 500 });
+  }
+};
+
+export { action };
