@@ -1,12 +1,16 @@
 import { z } from "zod";
 import { json } from "@remix-run/node";
-import {
-  createHybridActionApiRoute,
-} from "~/services/routeBuilders/apiBuilder.server";
+import { createHybridActionApiRoute } from "~/services/routeBuilders/apiBuilder.server";
 import { prisma } from "~/db.server";
 import { permissionService } from "~/services/permission.server";
+import { inviteService } from "~/services/inviteService.server";
 import { requireUser } from "~/services/session.server";
 import { logger } from "~/services/logger.service";
+
+// Schema for team params
+const TeamParamsSchema = z.object({
+  teamId: z.string(),
+});
 
 // Schema for inviting members
 const InviteMemberSchema = z.object({
@@ -14,10 +18,11 @@ const InviteMemberSchema = z.object({
   role: z.enum(["OWNER", "MEMBER"]).default("MEMBER"),
 });
 
-// POST /api/v1/teams/:teamId/members - Invite a member to team
+// POST /api/v1/teams/:teamId/members - Create a team invite (now uses invite system)
 const { action } = createHybridActionApiRoute(
   {
     body: InviteMemberSchema,
+    params: TeamParamsSchema,
     allowJWT: true,
     method: "POST",
     corsStrategy: "all",
@@ -32,147 +37,48 @@ const { action } = createHybridActionApiRoute(
         return json({ error: "Team ID is required" }, { status: 400 });
       }
 
-      // Check if user can invite members to this team
-      const canInvite = await permissionService.canPerformTeamAction(
-        userId,
-        teamId,
-        "invite",
-      );
-
-      if (!canInvite) {
-        return json(
-          { error: "You don't have permission to invite members to this team" },
-          { status: 403 },
-        );
-      }
-
       const { email, role } = body;
 
-      // Find user by email
-      const invitedUser = await prisma.user.findFirst({
-        where: {
-          email,
-        },
-      });
-
-      if (!invitedUser) {
-        return json(
-          { error: "User not found with this email" },
-          { status: 404 },
-        );
-      }
-
-      // Check if user is already a member
-      const existingMember = await prisma.teamMember.findUnique({
-        where: {
-          teamId_userId: {
-            teamId,
-            userId: invitedUser.id,
-          },
-        },
-      });
-
-      if (existingMember && !existingMember.deleted) {
-        return json(
-          { error: "User is already a member of this team" },
-          { status: 400 },
-        );
-      }
-
-      // If member was previously deleted, restore them
-      if (existingMember && existingMember.deleted) {
-        const restoredMember = await prisma.teamMember.update({
-          where: {
-            id: existingMember.id,
-          },
-          data: {
-            deleted: null,
-            role,
-            updatedAt: new Date(),
-          },
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-          },
-        });
-
-        logger.info(
-          `User ${invitedUser.id} restored to team ${teamId} by ${userId}`,
-        );
-
-        return json({
-          member: {
-            id: restoredMember.id,
-            role: restoredMember.role,
-            userId: restoredMember.userId,
-            teamId: restoredMember.teamId,
-            user: {
-              id: restoredMember.user.id,
-              name: restoredMember.user.name,
-              email: restoredMember.user.email,
-            },
-            createdAt: restoredMember.createdAt,
-            updatedAt: restoredMember.updatedAt,
-          },
-          success: true,
-        });
-      }
-
-      // Create new team member
-      const member = await prisma.teamMember.create({
-        data: {
-          teamId,
-          userId: invitedUser.id,
-          role,
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-        },
-      });
-
-      logger.info(
-        `User ${invitedUser.id} added to team ${teamId} by ${userId} with role ${role}`,
+      // Use invite service to create invite instead of direct member creation
+      const invite = await inviteService.createInvite(
+        teamId,
+        userId,
+        email,
+        role,
       );
 
       return json({
-        member: {
-          id: member.id,
-          role: member.role,
-          userId: member.userId,
-          teamId: member.teamId,
-          user: {
-            id: member.user.id,
-            name: member.user.name,
-            email: member.user.email,
-          },
-          createdAt: member.createdAt,
-          updatedAt: member.updatedAt,
+        invite: {
+          id: invite.id,
+          teamId: invite.teamId,
+          invitedUserEmail: invite.invitedUserEmail,
+          role: invite.role,
+          status: invite.status,
+          expiresAt: invite.expiresAt,
+          createdAt: invite.createdAt,
+          team: invite.team,
+          inviter: invite.inviter,
         },
         success: true,
+        message: "Invite sent! User needs to accept to join the team.",
       });
     } catch (error) {
-      logger.error(
-        "Error inviting team member:",
-        error as Record<string, unknown>,
-      );
-      return json({ error: "Failed to invite member" }, { status: 500 });
+      logger.error("Error creating team invite:", error as any);
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to create invite";
+      return json({ error: errorMessage }, { status: 400 });
     }
   },
 );
 
 // GET /api/v1/teams/:teamId/members - List team members
-export const loader = async ({ params, request }) => {
+export const loader = async ({
+  params,
+  request,
+}: {
+  params: any;
+  request: Request;
+}) => {
   try {
     const user = await requireUser(request);
     const { teamId } = params;
@@ -235,7 +141,7 @@ export const loader = async ({ params, request }) => {
       success: true,
     });
   } catch (error) {
-    logger.error("Error fetching team members:", error);
+    logger.error("Error fetching team members:", error as any);
     return json({ error: "Failed to fetch members" }, { status: 500 });
   }
 };

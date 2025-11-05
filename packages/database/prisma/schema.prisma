@@ -1,7 +1,6 @@
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
 }
 
 generator client {
@@ -570,6 +569,8 @@ model User {
 
   // Team relations
   teamMemberships         TeamMember[]
+  teamInvitesReceived     TeamInvite[] @relation("invite_received")
+  teamInvitesSent         TeamInvite[] @relation("invite_sent")
   oauthIntegrationGrants  OAuthIntegrationGrant[]
   oAuthClientInstallation OAuthClientInstallation[]
   UserUsage               UserUsage?
@@ -712,6 +713,7 @@ model Team {
 
   members TeamMember[]
   spaces  Space[]
+  invites TeamInvite[]
 
   @@index([workspaceId])
   @@index([slug])
@@ -734,6 +736,34 @@ model TeamMember {
   @@unique([teamId, userId])
   @@index([userId])
   @@index([teamId])
+}
+
+model TeamInvite {
+  id          String   @id @default(cuid())
+  teamId      String
+  inviterId   String
+
+  invitedUserId String?
+  invitedUserEmail String
+
+  role        String   @default("MEMBER")
+  status      String   @default("PENDING") // PENDING, ACCEPTED, REFUSED, EXPIRED
+  token       String   @default(cuid()) @unique
+
+  expiresAt   DateTime @default(dbgenerated("now() + interval '7 days'"))
+  respondedAt DateTime?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  inviter     User     @relation(fields: [inviterId], references: [id], name: "invite_sent")
+  invitedUser User?    @relation(fields: [invitedUserId], references: [id], name: "invite_received")
+
+  @@index([teamId])
+  @@index([invitedUserId])
+  @@index([invitedUserEmail])
+  @@index([status])
 }
 
 model Workspace {

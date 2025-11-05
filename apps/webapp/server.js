@@ -21,7 +21,15 @@ async function init() {
         : build.entry?.module;
     remixHandler = createRequestHandler({ build });
     const app = express();
-    app.use(compression());
+    // Disable compression for streaming endpoints
+    app.use((req, res, next) => {
+        if (req.path.startsWith('/api/v1/conversation')) {
+            next();
+        }
+        else {
+            compression()(req, res, next);
+        }
+    });
     // http://expressjs.com/en/advanced/best-practice-security.html#at-a-minimum-disable-x-powered-by-header
     app.disable("x-powered-by");
     // handle asset requests

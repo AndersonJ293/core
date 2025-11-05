@@ -28,6 +28,7 @@ import { Project } from "../icons/project";
 import { AddMemoryCommand } from "../command-bar/add-memory-command";
 import { AddMemoryDialog } from "../command-bar/memory-dialog.client";
 import { TeamSidebar } from "../teams/team-sidebar";
+import { InviteNotification } from "../invites/invite-notification";
 
 const data = {
   navMain: [
@@ -89,11 +90,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 variant="secondary"
                 isActive
                 size="sm"
-                className="rounded cursor-pointer"
+                className="cursor-pointer rounded"
                 onClick={() => setShowAddMemory(true)}
               >
                 <Plus size={16} />
               </Button>
+              <InviteNotification />
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarHeader>

@@ -9,6 +9,11 @@ import { permissionService } from "~/services/permission.server";
 import { requireUser } from "~/services/session.server";
 import { logger } from "~/services/logger.service";
 
+// Schema for team params
+const TeamParamsSchema = z.object({
+  teamId: z.string(),
+});
+
 // Schema for creating spaces
 const CreateSpaceSchema = z.object({
   name: z.string().min(1).max(100),
@@ -21,6 +26,7 @@ const CreateSpaceSchema = z.object({
 const { action } = createHybridActionApiRoute(
   {
     body: CreateSpaceSchema,
+    params: TeamParamsSchema,
     allowJWT: true,
     method: "POST",
     corsStrategy: "all",
@@ -90,17 +96,20 @@ const { action } = createHybridActionApiRoute(
         success: true,
       });
     } catch (error) {
-      logger.error(
-        "Error creating space:",
-        error as Record<string, unknown>,
-      );
+      logger.error("Error creating space:", error as Record<string, unknown>);
       return json({ error: "Failed to create space" }, { status: 500 });
     }
   },
 );
 
 // GET /api/v1/teams/:teamId/spaces - List team spaces
-export const loader = async ({ params, request }) => {
+export const loader = async ({
+  params,
+  request,
+}: {
+  params: any;
+  request: Request;
+}) => {
   try {
     const user = await requireUser(request);
     const { teamId } = params;
