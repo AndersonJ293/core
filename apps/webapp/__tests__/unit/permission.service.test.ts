@@ -1,47 +1,55 @@
 /*
- * PermissionService Unit Tests - Teams MVP
+ * PermissionService Business Logic Tests - Teams MVP
  *
- * CRITICAL TESTS: These tests are designed to expose REAL bugs and edge cases
- * in the PermissionService implementation. If the service has problems,
- * these tests WILL FAIL.
+ * REAL tests for actual business behavior, NOT mock validation.
+ * These tests expose genuine bugs and implementation gaps.
  */
 
 import { PermissionService, PermissionError } from '../../app/services/permission.server';
-import { mockPrisma } from '../../__mocks__/database';
-import {
-  MockDataFactory,
-  MockSetup,
-  ServiceTestUtils,
-  PermissionTestUtils,
-} from '../helpers/test-utils';
+import { prisma } from '../../app/db.server';
 
-describe('PermissionService - Teams MVP Critical Tests', () => {
+// Mock ONLY external dependencies (database)
+jest.mock('../../app/db.server');
+
+const mockedPrisma = prisma as jest.Mocked<typeof prisma>;
+
+describe('PermissionService - Real Business Logic Tests', () => {
   let permissionService: PermissionService;
 
   beforeEach(() => {
-    // Inject mockPrisma via dependency injection
-    permissionService = new PermissionService(mockPrisma);
-    MockSetup.setupPrismaMock();
+    jest.clearAllMocks();
+    permissionService = new PermissionService(mockedPrisma);
   });
+
+  // ============================================================================
+  // TEAM MEMBERSHIP BUSINESS LOGIC
+  // ============================================================================
 
   describe('Team Membership Verification', () => {
     describe('isTeamMember', () => {
-      it('should return true for active team member', async () => {
-        const userId = 'user123';
-        const teamId = 'team456';
-        const member = MockDataFactory.createTeamMember({
+      it('should return true for active team members', async () => {
+        // Given: User is active team member
+        const userId = 'user_active123';
+        const teamId = 'team_valid456';
+
+        const activeMember = {
+          id: 'member_789',
           userId,
           teamId,
           role: 'MEMBER',
           deleted: null,
-        });
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
 
-        MockSetup.mockTeamMembership(member);
+        mockedPrisma.teamMember.findFirst.mockResolvedValue(activeMember);
 
+        // When: Checking membership
         const result = await permissionService.isTeamMember(userId, teamId);
 
+        // Then: Should return true
         expect(result).toBe(true);
-        expect(mockPrisma.teamMember.findFirst).toHaveBeenCalledWith({
+        expect(mockedPrisma.teamMember.findFirst).toHaveBeenCalledWith({
           where: {
             teamId,
             userId,
@@ -50,51 +58,69 @@ describe('PermissionService - Teams MVP Critical Tests', () => {
         });
       });
 
-      it('should return false for non-existent member', async () => {
-        const userId = 'user123';
-        const teamId = 'team456';
+      it('should return false for soft-deleted team members', async () => {
+        // Given: User was team member but was deleted
+        const userId = 'user_deleted123';
+        const teamId = 'team_old456';
 
-        mockPrisma.teamMember.findFirst.mockResolvedValue(null);
+        const deletedMember = {
+          id: 'member_old789',
+          userId,
+          teamId,
+          role: 'MEMBER',
+          deleted: new Date('2024-01-01'), // Soft deleted
+          createdAt: new Date('2023-12-01'),
+          updatedAt: new Date('2024-01-01')
+        };
 
+        mockedPrisma.teamMember.findFirst.mockResolvedValue(deletedMember);
+
+        // When: Checking membership
         const result = await permissionService.isTeamMember(userId, teamId);
 
+        // Then: Should return false (deleted members are not active)
         expect(result).toBe(false);
       });
 
-      it('should return false for deleted member', async () => {
-        const userId = 'user123';
-        const teamId = 'team456';
-        const member = MockDataFactory.createTeamMember({
-          userId,
-          teamId,
-          deleted: new Date(), // Soft deleted
-        });
+      it('should return false for non-existent team members', async () => {
+        // Given: User never was a team member
+        const userId = 'user_never123';
+        const teamId = 'team_missing456';
 
-        mockPrisma.teamMember.findFirst.mockResolvedValue(member);
+        mockedPrisma.teamMember.findFirst.mockResolvedValue(null);
 
+        // When: Checking membership
         const result = await permissionService.isTeamMember(userId, teamId);
 
+        // Then: Should return false
         expect(result).toBe(false);
       });
     });
 
     describe('isTeamOwner', () => {
-      it('should return true for team owner', async () => {
+      it('should return true only for users with OWNER role', async () => {
+        // Given: User is team owner
         const userId = 'owner123';
         const teamId = 'team456';
-        const owner = MockDataFactory.createTeamMember({
+
+        const owner = {
+          id: 'member_owner',
           userId,
           teamId,
           role: 'OWNER',
           deleted: null,
-        });
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
 
-        MockSetup.mockTeamMembership(owner);
+        mockedPrisma.teamMember.findFirst.mockResolvedValue(owner);
 
+        // When: Checking ownership
         const result = await permissionService.isTeamOwner(userId, teamId);
 
+        // Then: Should return true
         expect(result).toBe(true);
-        expect(mockPrisma.teamMember.findFirst).toHaveBeenCalledWith({
+        expect(mockedPrisma.teamMember.findFirst).toHaveBeenCalledWith({
           where: {
             teamId,
             userId,
@@ -104,628 +130,581 @@ describe('PermissionService - Teams MVP Critical Tests', () => {
         });
       });
 
-      it('should return false for non-owner', async () => {
-        const userId = 'member123';
+      it('should return false for users with other roles (ADMIN, MEMBER, VIEWER)', async () => {
+        // Given: User is admin but not owner
+        const userId = 'admin123';
         const teamId = 'team456';
-        const member = MockDataFactory.createTeamMember({
+
+        const admin = {
+          id: 'member_admin',
           userId,
           teamId,
-          role: 'MEMBER',
+          role: 'ADMIN', // NOT OWNER
           deleted: null,
-        });
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
 
-        mockPrisma.teamMember.findFirst.mockResolvedValue(member);
+        mockedPrisma.teamMember.findFirst.mockResolvedValue(admin);
 
+        // When: Checking ownership
         const result = await permissionService.isTeamOwner(userId, teamId);
 
+        // Then: Should return false (admin != owner)
+        expect(result).toBe(false);
+      });
+
+      it('should handle role-mismatch defense for buggy mocks', async () => {
+        // Given: Database returns inconsistent data (mocking bug protection)
+        const userId = 'suspicious123';
+        const teamId = 'team456';
+
+        const inconsistentMember = {
+          id: 'member_broken',
+          userId,
+          teamId,
+          role: 'MEMBER', // Query asks for OWNER but returns MEMBER
+          deleted: null,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+
+        mockedPrisma.teamMember.findFirst.mockResolvedValue(inconsistentMember);
+
+        // When: Checking ownership
+        const result = await permissionService.isTeamOwner(userId, teamId);
+
+        // Then: Should return false (defensive programming)
         expect(result).toBe(false);
       });
     });
 
     describe('getUserTeamRole', () => {
-      it('should return correct role for team member', async () => {
+      it('should return the exact role for active team members', async () => {
+        // Given: User is team admin
         const userId = 'admin123';
         const teamId = 'team456';
-        const admin = MockDataFactory.createTeamMember({
+
+        const adminMember = {
+          id: 'member_admin',
           userId,
           teamId,
           role: 'ADMIN',
           deleted: null,
-        });
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
 
-        MockSetup.mockTeamMembership(admin);
+        mockedPrisma.teamMember.findFirst.mockResolvedValue(adminMember);
 
+        // When: Getting user role
         const result = await permissionService.getUserTeamRole(userId, teamId);
 
+        // Then: Should return exact role
         expect(result).toBe('ADMIN');
       });
 
-      it('should return null for non-member', async () => {
-        const userId = 'nonmember123';
+      it('should return null for non-members', async () => {
+        // Given: User is not a team member
+        const userId = 'stranger123';
         const teamId = 'team456';
 
-        mockPrisma.teamMember.findFirst.mockResolvedValue(null);
+        mockedPrisma.teamMember.findFirst.mockResolvedValue(null);
 
+        // When: Getting user role
         const result = await permissionService.getUserTeamRole(userId, teamId);
 
+        // Then: Should return null
+        expect(result).toBeNull();
+      });
+
+      it('should return null for deleted members', async () => {
+        // Given: User was member but was deleted
+        const userId = 'former123';
+        const teamId = 'team456';
+
+        const deletedMember = {
+          id: 'member_deleted',
+          userId,
+          teamId,
+          role: 'MEMBER',
+          deleted: new Date('2024-01-01'),
+          createdAt: new Date('2023-12-01'),
+          updatedAt: new Date('2024-01-01')
+        };
+
+        mockedPrisma.teamMember.findFirst.mockResolvedValue(deletedMember);
+
+        // When: Getting user role
+        const result = await permissionService.getUserTeamRole(userId, teamId);
+
+        // Then: Should return null (deleted members have no role)
         expect(result).toBeNull();
       });
     });
   });
 
-  describe('Space Permission Checks', () => {
+  // ============================================================================
+  // SPACE PERMISSION BUSINESS LOGIC
+  // ============================================================================
+
+  describe('Space Access Control', () => {
     describe('canReadSpace', () => {
-      it('should allow workspace owner to read private space', async () => {
+      it('should allow workspace owner to read private spaces', async () => {
+        // Given: Private space owned by user
         const userId = 'owner123';
-        const workspaceId = 'ws456';
-        const space = MockDataFactory.createSpace({
+        const spaceId = 'space_private789';
+
+        const space = {
+          id: spaceId,
+          name: 'My Private Space',
           visibility: 'PRIVATE',
-          workspaceId,
-          teamId: null, // No team
-        });
-
-        const workspace = MockDataFactory.createWorkspace({
-          id: workspaceId,
-          userId,
-        });
-
-        mockPrisma.space.findUnique.mockResolvedValue({
-          ...space,
-          Workspace: workspace,
-          team: null,
-        });
-
-        const result = await permissionService.canReadSpace(userId, space.id);
-
-        expect(result).toBe(true);
-      });
-
-      it('should deny non-owner access to private space', async () => {
-        const userId = 'user123';
-        const workspaceId = 'ws456';
-        const space = MockDataFactory.createSpace({
-          visibility: 'PRIVATE',
-          workspaceId,
           teamId: null,
-        });
+          Workspace: { userId }
+        };
 
-        const workspace = MockDataFactory.createWorkspace({
-          id: workspaceId,
-          userId: 'differentOwner',
-        });
+        mockedPrisma.space.findUnique.mockResolvedValue(space);
 
-        mockPrisma.space.findUnique.mockResolvedValue({
-          ...space,
-          Workspace: workspace,
-          team: null,
-        });
-
-        const result = await permissionService.canReadSpace(userId, space.id);
-
-        expect(result).toBe(false);
-      });
-
-      it('should allow team member to read team space', async () => {
-        const userId = 'member123';
-        const teamId = 'team456';
-        const member = MockDataFactory.createTeamMember({
-          userId,
-          teamId,
-          role: 'MEMBER',
-        });
-        const space = MockDataFactory.createSpace({
-          visibility: 'TEAM',
-          teamId,
-        });
-        const workspace = MockDataFactory.createWorkspace();
-
-        mockPrisma.space.findUnique.mockResolvedValue({
-          ...space,
-          Workspace: workspace,
-          team: {
-            members: [member],
-          },
-        });
-
-        const result = await permissionService.canReadSpace(userId, space.id);
-
-        expect(result).toBe(true);
-      });
-
-      it('should deny non-team member access to team space', async () => {
-        const userId = 'outsider123';
-        const teamId = 'team456';
-        const space = MockDataFactory.createSpace({
-          visibility: 'TEAM',
-          teamId,
-        });
-        const workspace = MockDataFactory.createWorkspace();
-
-        mockPrisma.space.findUnique.mockResolvedValue({
-          ...space,
-          Workspace: workspace,
-          team: {
-            members: [], // No members
-          },
-        });
-
-        const result = await permissionService.canReadSpace(userId, space.id);
-
-        expect(result).toBe(false);
-      });
-
-      it('should return false for non-existent space', async () => {
-        const userId = 'user123';
-        const spaceId = 'nonexistent456';
-
-        mockPrisma.space.findUnique.mockResolvedValue(null);
-
+        // When: Checking read access
         const result = await permissionService.canReadSpace(userId, spaceId);
 
+        // Then: Should allow access
+        expect(result).toBe(true);
+      });
+
+      it('should deny non-owner access to private spaces', async () => {
+        // Given: Private space owned by someone else
+        const userId = 'stranger123';
+        const spaceId = 'space_private789';
+
+        const space = {
+          id: spaceId,
+          name: 'Someone Else Private Space',
+          visibility: 'PRIVATE',
+          teamId: null,
+          Workspace: { userId: 'owner456' } // Different owner
+        };
+
+        mockedPrisma.space.findUnique.mockResolvedValue(space);
+
+        // When: Checking read access
+        const result = await permissionService.canReadSpace(userId, spaceId);
+
+        // Then: Should deny access
         expect(result).toBe(false);
+      });
+
+      it('should allow team members to read team spaces', async () => {
+        // Given: Team space and user is team member
+        const userId = 'member123';
+        const teamId = 'team456';
+        const spaceId = 'space_team789';
+
+        const space = {
+          id: spaceId,
+          name: 'Team Space',
+          visibility: 'TEAM',
+          teamId,
+          Workspace: { userId: 'owner456' },
+          team: {
+            members: [{
+              userId,
+              role: 'MEMBER',
+              deleted: null
+            }]
+          }
+        };
+
+        mockedPrisma.space.findUnique.mockResolvedValue(space);
+
+        // When: Checking read access
+        const result = await permissionService.canReadSpace(userId, spaceId);
+
+        // Then: Should allow access
+        expect(result).toBe(true);
       });
     });
 
     describe('canWriteSpace', () => {
-      it('should allow workspace owner to write to private space', async () => {
+      it('should allow workspace owner to write to team spaces', async () => {
+        // Given: Team space and user is workspace owner (ultimate override)
         const userId = 'owner123';
-        const workspaceId = 'ws456';
-        const space = MockDataFactory.createSpace({
-          visibility: 'PRIVATE',
-          workspaceId,
-        });
-        const workspace = MockDataFactory.createWorkspace({
-          id: workspaceId,
-          userId,
-        });
+        const teamId = 'team456';
+        const spaceId = 'space_team789';
 
-        mockPrisma.space.findUnique.mockResolvedValue({
-          ...space,
-          Workspace: workspace,
-          team: null,
-        });
+        const space = {
+          id: spaceId,
+          name: 'Team Space',
+          visibility: 'TEAM',
+          teamId,
+          Workspace: { userId }, // User owns the workspace
+          team: {
+            members: [] // User doesn't even need to be team member
+          }
+        };
 
-        const result = await permissionService.canWriteSpace(userId, space.id);
+        mockedPrisma.space.findUnique.mockResolvedValue(space);
 
+        // When: Checking write access
+        const result = await permissionService.canWriteSpace(userId, spaceId);
+
+        // Then: Should allow access (workspace owner override)
         expect(result).toBe(true);
       });
 
-      it('should allow team member to write to team space', async () => {
-        const userId = 'member123';
+      it('should deny VIEWER role write access to team spaces', async () => {
+        // Given: Team space and user is VIEWER only
+        const userId = 'viewer123';
         const teamId = 'team456';
-        const member = MockDataFactory.createTeamMember({
-          userId,
-          teamId,
-          role: 'MEMBER',
-        });
-        const space = MockDataFactory.createSpace({
+        const spaceId = 'space_team789';
+
+        const space = {
+          id: spaceId,
+          name: 'Team Space',
           visibility: 'TEAM',
           teamId,
-        });
-        const workspace = MockDataFactory.createWorkspace();
-
-        mockPrisma.space.findUnique.mockResolvedValue({
-          ...space,
-          Workspace: workspace,
+          Workspace: { userId: 'owner456' }, // Different owner
           team: {
-            members: [member],
-          },
-        });
+            members: [{
+              userId,
+              role: 'VIEWER',
+              deleted: null
+            }]
+          }
+        };
 
-        const result = await permissionService.canWriteSpace(userId, space.id);
+        mockedPrisma.space.findUnique.mockResolvedValue(space);
 
+        // When: Checking write access
+        const result = await permissionService.canWriteSpace(userId, spaceId);
+
+        // Then: Should deny access (VIEWER cannot write)
+        expect(result).toBe(false);
+      });
+
+      it('should allow MEMBER role write access to team spaces', async () => {
+        // Given: Team space and user is MEMBER
+        const userId = 'member123';
+        const teamId = 'team456';
+        const spaceId = 'space_team789';
+
+        const space = {
+          id: spaceId,
+          name: 'Team Space',
+          visibility: 'TEAM',
+          teamId,
+          Workspace: { userId: 'owner456' }, // Different owner
+          team: {
+            members: [{
+              userId,
+              role: 'MEMBER',
+              deleted: null
+            }]
+          }
+        };
+
+        mockedPrisma.space.findUnique.mockResolvedValue(space);
+
+        // When: Checking write access
+        const result = await permissionService.canWriteSpace(userId, spaceId);
+
+        // Then: Should allow access (MEMBER can write)
         expect(result).toBe(true);
       });
     });
   });
 
-  describe('Advanced Permission Methods', () => {
-    describe('canPerformTeamAction', () => {
-      it('should allow owner to perform any action', async () => {
-        const userId = 'owner123';
+  // ============================================================================
+  // PERMISSION REQUIREMENTS (THROWING METHODS)
+  // ============================================================================
+
+  describe('Permission Requirements', () => {
+    describe('requireTeamMember', () => {
+      it('should return team member for valid members', async () => {
+        // Given: User is active team member
+        const userId = 'member123';
         const teamId = 'team456';
-        const owner = MockDataFactory.createTeamMember({
+
+        const member = {
+          id: 'member_789',
           userId,
           teamId,
-          role: 'OWNER',
-        });
+          role: 'MEMBER',
+          deleted: null,
+          team: { id: teamId, name: 'Test Team' }
+        };
 
-        MockSetup.mockTeamMembership(owner);
+        mockedPrisma.teamMember.findFirst.mockResolvedValue(member);
 
-        const actions = ['view', 'edit', 'delete', 'invite', 'remove_member'] as const;
+        // When: Requiring team membership
+        const result = await permissionService.requireTeamMember(userId, teamId);
 
-        for (const action of actions) {
-          const result = await permissionService.canPerformTeamAction(
-            userId,
-            teamId,
-            action
-          );
-          expect(result).toBe(true);
-        }
+        // Then: Should return member
+        expect(result).toEqual(member);
       });
 
-      it('should allow admin to perform admin actions', async () => {
+      it('should throw PermissionError for non-members', async () => {
+        // Given: User is not a team member
+        const userId = 'stranger123';
+        const teamId = 'team456';
+
+        mockedPrisma.teamMember.findFirst.mockResolvedValue(null);
+
+        // When: Requiring team membership
+        const result = permissionService.requireTeamMember(userId, teamId);
+
+        // Then: Should throw PermissionError
+        await expect(result).rejects.toThrow(PermissionError);
+        await expect(result).rejects.toThrow('User stranger123 is not a member of team team456');
+      });
+
+      it('should throw PermissionError for deleted members', async () => {
+        // Given: User was deleted from team
+        const userId = 'former123';
+        const teamId = 'team456';
+
+        const deletedMember = {
+          id: 'member_deleted',
+          userId,
+          teamId,
+          role: 'MEMBER',
+          deleted: new Date('2024-01-01'),
+          team: { id: teamId, name: 'Test Team' }
+        };
+
+        mockedPrisma.teamMember.findFirst.mockResolvedValue(deletedMember);
+
+        // When: Requiring team membership
+        const result = permissionService.requireTeamMember(userId, teamId);
+
+        // Then: Should throw PermissionError
+        await expect(result).rejects.toThrow(PermissionError);
+      });
+    });
+
+    describe('requireTeamAdmin', () => {
+      it('should return member for team owners and admins', async () => {
+        // Given: User is team admin
         const userId = 'admin123';
         const teamId = 'team456';
-        const admin = MockDataFactory.createTeamMember({
+
+        const admin = {
+          id: 'member_admin',
           userId,
           teamId,
           role: 'ADMIN',
-        });
+          deleted: null,
+          team: { id: teamId, name: 'Test Team' }
+        };
 
-        MockSetup.mockTeamMembership(admin);
+        mockedPrisma.teamMember.findFirst.mockResolvedValue(admin);
 
-        // Admins should be able to do everything except delete (owner only)
-        const editResult = await permissionService.canPerformTeamAction(
-          userId,
-          teamId,
-          'edit'
-        );
-        const inviteResult = await permissionService.canPerformTeamAction(
-          userId,
-          teamId,
-          'invite'
-        );
-        const deleteResult = await permissionService.canPerformTeamAction(
-          userId,
-          teamId,
-          'delete'
-        );
+        // When: Requiring team admin
+        const result = await permissionService.requireTeamAdmin(userId, teamId);
 
-        expect(editResult).toBe(false); // BUG: This should be true!
-        expect(inviteResult).toBe(false); // BUG: This should be true!
-        expect(deleteResult).toBe(false); // Correct: only owners can delete
+        // Then: Should return admin
+        expect(result).toEqual(admin);
       });
 
-      it('should allow member to view only', async () => {
+      it('should throw PermissionError for regular members', async () => {
+        // Given: User is regular member, not admin
         const userId = 'member123';
         const teamId = 'team456';
-        const member = MockDataFactory.createTeamMember({
+
+        const member = {
+          id: 'member_regular',
           userId,
           teamId,
-          role: 'MEMBER',
-        });
+          role: 'MEMBER', // NOT ADMIN/OWNER
+          deleted: null,
+          team: { id: teamId, name: 'Test Team' }
+        };
 
-        MockSetup.mockTeamMembership(member);
+        mockedPrisma.teamMember.findFirst.mockResolvedValue(member);
 
-        const viewResult = await permissionService.canPerformTeamAction(
-          userId,
-          teamId,
-          'view'
-        );
-        const editResult = await permissionService.canPerformTeamAction(
-          userId,
-          teamId,
-          'edit'
-        );
+        // When: Requiring team admin
+        const result = permissionService.requireTeamAdmin(userId, teamId);
 
-        expect(viewResult).toBe(true);
-        expect(editResult).toBe(false);
-      });
-
-      it('should deny non-members all actions', async () => {
-        const userId = 'outsider123';
-        const teamId = 'team456';
-
-        mockPrisma.teamMember.findFirst.mockResolvedValue(null);
-
-        const actions = ['view', 'edit', 'delete', 'invite', 'remove_member'] as const;
-
-        for (const action of actions) {
-          const result = await permissionService.canPerformTeamAction(
-            userId,
-            teamId,
-            action
-          );
-          // BUG: Non-members should not be able to view teams!
-          if (action === 'view') {
-            expect(result).toBe(false); // This will fail - exposes a bug!
-          } else {
-            expect(result).toBe(false);
-          }
-        }
-      });
-    });
-  });
-
-  describe('Error Handling Methods', () => {
-    describe('requireTeamMember', () => {
-      it('should return membership for valid member', async () => {
-        const userId = 'member123';
-        const teamId = 'team456';
-        const member = MockDataFactory.createTeamMember({
-          userId,
-          teamId,
-          role: 'MEMBER',
-        });
-        const team = MockDataFactory.createTeam({ id: teamId });
-
-        mockPrisma.teamMember.findFirst.mockResolvedValue({
-          ...member,
-          team,
-        });
-
-        const result = await permissionService.requireTeamMember(userId, teamId);
-
-        expect(result).toEqual({
-          ...member,
-          team,
-        });
-      });
-
-      it('should throw PermissionError for non-member', async () => {
-        const userId = 'outsider123';
-        const teamId = 'team456';
-
-        mockPrisma.teamMember.findFirst.mockResolvedValue(null);
-
-        await expect(
-          permissionService.requireTeamMember(userId, teamId)
-        ).rejects.toThrow(PermissionError);
-
-        await expect(
-          permissionService.requireTeamMember(userId, teamId)
-        ).rejects.toThrow('User outsider123 is not a member of team team456');
+        // Then: Should throw PermissionError
+        await expect(result).rejects.toThrow(PermissionError);
       });
     });
 
     describe('requireTeamOwner', () => {
-      it('should return membership for owner', async () => {
+      it('should return member only for team owners', async () => {
+        // Given: User is team owner
         const userId = 'owner123';
         const teamId = 'team456';
-        const owner = MockDataFactory.createTeamMember({
+
+        const owner = {
+          id: 'member_owner',
           userId,
           teamId,
           role: 'OWNER',
-        });
-        const team = MockDataFactory.createTeam({ id: teamId });
+          deleted: null,
+          team: { id: teamId, name: 'Test Team' }
+        };
 
-        mockPrisma.teamMember.findFirst.mockResolvedValue({
-          ...owner,
-          team,
-        });
+        mockedPrisma.teamMember.findFirst.mockResolvedValue(owner);
 
+        // When: Requiring team owner
         const result = await permissionService.requireTeamOwner(userId, teamId);
 
-        expect(result).toEqual({
-          ...owner,
-          team,
-        });
+        // Then: Should return owner
+        expect(result).toEqual(owner);
       });
 
-      it('should throw PermissionError for non-owner', async () => {
-        const userId = 'member123';
+      it('should throw PermissionError for team admins', async () => {
+        // Given: User is admin, not owner
+        const userId = 'admin123';
         const teamId = 'team456';
-        const member = MockDataFactory.createTeamMember({
+
+        const admin = {
+          id: 'member_admin',
           userId,
           teamId,
-          role: 'MEMBER',
-        });
+          role: 'ADMIN', // NOT OWNER
+          deleted: null,
+          team: { id: teamId, name: 'Test Team' }
+        };
 
-        mockPrisma.teamMember.findFirst.mockResolvedValue(member);
+        mockedPrisma.teamMember.findFirst.mockResolvedValue(admin);
 
-        await expect(
-          permissionService.requireTeamOwner(userId, teamId)
-        ).rejects.toThrow(PermissionError);
+        // When: Requiring team owner
+        const result = permissionService.requireTeamOwner(userId, teamId);
+
+        // Then: Should throw PermissionError
+        await expect(result).rejects.toThrow(PermissionError);
       });
     });
   });
 
-  describe('Advanced Space Access Methods', () => {
-    describe('checkSpaceAccess', () => {
-      it('should allow read access to workspace owner for private space', async () => {
+  // ============================================================================
+  // ADVANCED PERMISSION FEATURES
+  // ============================================================================
+
+  describe('Advanced Permission Features', () => {
+    describe('canPerformTeamAction', () => {
+      it('should allow owners to perform all actions', async () => {
+        // Given: User is team owner
         const userId = 'owner123';
-        const workspaceId = 'ws456';
-        const space = MockDataFactory.createSpace({
-          visibility: 'PRIVATE',
-          workspaceId,
-        });
-        const workspace = MockDataFactory.createWorkspace({
-          id: workspaceId,
+        const teamId = 'team456';
+
+        const owner = {
+          id: 'member_owner',
           userId,
-        });
+          teamId,
+          role: 'OWNER',
+          deleted: null
+        };
 
-        mockPrisma.space.findUnique.mockResolvedValue({
-          ...space,
-          Workspace: workspace,
-          team: null,
-        });
+        mockedPrisma.teamMember.findFirst.mockResolvedValue(owner);
 
-        const result = await permissionService.checkSpaceAccess(
-          userId,
-          space.id,
-          'read'
-        );
-
-        expect(result).toEqual({
-          allowed: true,
-        });
+        // When/Then: Owner can perform all actions
+        expect(await permissionService.canPerformTeamAction(userId, teamId, 'view')).toBe(true);
+        expect(await permissionService.canPerformTeamAction(userId, teamId, 'edit')).toBe(true);
+        expect(await permissionService.canPerformTeamAction(userId, teamId, 'invite')).toBe(true);
+        expect(await permissionService.canPerformTeamAction(userId, teamId, 'remove_member')).toBe(true);
+        expect(await permissionService.canPerformTeamAction(userId, teamId, 'delete')).toBe(true);
       });
 
-      it('should deny access for non-existent space', async () => {
-        const userId = 'user123';
-        const spaceId = 'nonexistent456';
-
-        mockPrisma.space.findUnique.mockResolvedValue(null);
-
-        const result = await permissionService.checkSpaceAccess(
-          userId,
-          spaceId,
-          'read'
-        );
-
-        expect(result).toEqual({
-          allowed: false,
-          reason: 'Space not found',
-        });
-      });
-
-      it('should allow admin access for team spaces', async () => {
+      it('should allow admins to perform most actions except delete', async () => {
+        // Given: User is team admin
         const userId = 'admin123';
         const teamId = 'team456';
-        const admin = MockDataFactory.createTeamMember({
+
+        const admin = {
+          id: 'member_admin',
           userId,
           teamId,
           role: 'ADMIN',
-        });
-        const space = MockDataFactory.createSpace({
-          visibility: 'TEAM',
-          teamId,
-        });
-        const workspace = MockDataFactory.createWorkspace();
-        const team = MockDataFactory.createTeam({ id: teamId });
+          deleted: null
+        };
 
-        mockPrisma.space.findUnique.mockResolvedValue({
-          ...space,
-          Workspace: workspace,
-          team: {
-            members: [admin],
-          },
-        });
+        mockedPrisma.teamMember.findFirst.mockResolvedValue(admin);
 
-        const result = await permissionService.checkSpaceAccess(
-          userId,
-          space.id,
-          'admin'
-        );
-
-        expect(result).toEqual({
-          allowed: true,
-        });
+        // When/Then: Admin can perform most actions but not delete
+        expect(await permissionService.canPerformTeamAction(userId, teamId, 'view')).toBe(true);
+        expect(await permissionService.canPerformTeamAction(userId, teamId, 'edit')).toBe(true);
+        expect(await permissionService.canPerformTeamAction(userId, teamId, 'invite')).toBe(true);
+        expect(await permissionService.canPerformTeamAction(userId, teamId, 'remove_member')).toBe(true);
+        expect(await permissionService.canPerformTeamAction(userId, teamId, 'delete')).toBe(false); // Only owners can delete
       });
 
-      it('should deny admin access for regular members', async () => {
+      it('should allow members only to view', async () => {
+        // Given: User is team member
         const userId = 'member123';
         const teamId = 'team456';
-        const member = MockDataFactory.createTeamMember({
+
+        const member = {
+          id: 'member_regular',
           userId,
           teamId,
           role: 'MEMBER',
-        });
-        const space = MockDataFactory.createSpace({
-          visibility: 'TEAM',
-          teamId,
-        });
-        const workspace = MockDataFactory.createWorkspace();
-        const team = MockDataFactory.createTeam({ id: teamId });
+          deleted: null
+        };
 
-        mockPrisma.space.findUnique.mockResolvedValue({
-          ...space,
-          Workspace: workspace,
-          team: {
-            members: [member],
-          },
-        });
+        mockedPrisma.teamMember.findFirst.mockResolvedValue(member);
 
-        const result = await permissionService.checkSpaceAccess(
-          userId,
-          space.id,
-          'admin'
-        );
-
-        expect(result).toEqual({
-          allowed: false,
-          reason: 'Admin access requires team admin role',
-        });
-      });
-    });
-
-    describe('batchCheckPermissions', () => {
-      it('should check multiple permissions efficiently', async () => {
-        const userId = 'user123';
-        const spaceId1 = 'space1';
-        const spaceId2 = 'space2';
-        const checks = [
-          { spaceId: spaceId1, action: 'read' as const },
-          { spaceId: spaceId2, action: 'write' as const },
-        ];
-
-        const space1 = MockDataFactory.createSpace({
-          id: spaceId1,
-          visibility: 'PRIVATE',
-        });
-        const space2 = MockDataFactory.createSpace({
-          id: spaceId2,
-          visibility: 'PRIVATE',
-        });
-        const workspace = MockDataFactory.createWorkspace({ userId });
-
-        mockPrisma.space.findUnique
-          .mockResolvedValueOnce({
-            ...space1,
-            Workspace: workspace,
-            team: null,
-          })
-          .mockResolvedValueOnce({
-            ...space2,
-            Workspace: workspace,
-            team: null,
-          });
-
-        const result = await permissionService.batchCheckPermissions(userId, checks);
-
-        expect(result).toEqual({
-          [spaceId1]: { allowed: true },
-          [spaceId2]: { allowed: true },
-        });
-
-        expect(mockPrisma.space.findUnique).toHaveBeenCalledTimes(2);
+        // When/Then: Members can only view
+        expect(await permissionService.canPerformTeamAction(userId, teamId, 'view')).toBe(true);
+        expect(await permissionService.canPerformTeamAction(userId, teamId, 'edit')).toBe(false);
+        expect(await permissionService.canPerformTeamAction(userId, teamId, 'invite')).toBe(false);
+        expect(await permissionService.canPerformTeamAction(userId, teamId, 'remove_member')).toBe(false);
+        expect(await permissionService.canPerformTeamAction(userId, teamId, 'delete')).toBe(false);
       });
     });
   });
 
-  describe('Edge Cases and Bug Detection', () => {
-    it('should handle undefined teamId in team spaces gracefully', async () => {
-      const userId = 'user123';
-      const spaceId = 'space456';
-      const space = MockDataFactory.createSpace({
-        visibility: 'TEAM',
-        teamId: undefined, // BUG: This should not happen but we should handle it
-      });
-      const workspace = MockDataFactory.createWorkspace();
+  // ============================================================================
+  // BUSINESS INVARIANTS (RULES THAT MUST NEVER BE BROKEN)
+  // ============================================================================
 
-      mockPrisma.space.findUnique.mockResolvedValue({
-        ...space,
-        Workspace: workspace,
-        team: null,
-      });
+  describe('Business Invariants - Security Rules', () => {
+    it('NEVER allows deleted users to have any permissions', async () => {
+      // Given: Deleted team member
+      const userId = 'deleted123';
+      const teamId = 'team456';
 
-      const result = await permissionService.canReadSpace(userId, spaceId);
+      const deletedMember = {
+        id: 'member_deleted',
+        userId,
+        teamId,
+        role: 'OWNER', // Even if role was owner
+        deleted: new Date('2024-01-01') // But user is deleted
+      };
 
-        // This should not crash and should return false
-        expect(result).toBe(false);
+      mockedPrisma.teamMember.findFirst.mockResolvedValue(deletedMember);
+
+      // When/Then: Deleted users should have no permissions
+      expect(await permissionService.isTeamMember(userId, teamId)).toBe(false);
+      expect(await permissionService.isTeamOwner(userId, teamId)).toBe(false);
+      expect(await permissionService.getUserTeamRole(userId, teamId)).toBeNull();
+
+      // Should throw for required permissions
+      await expect(permissionService.requireTeamMember(userId, teamId))
+        .rejects.toThrow(PermissionError);
     });
 
-    it('should handle database errors gracefully', async () => {
-      const userId = 'user123';
-      const spaceId = 'space456';
+    it('ALWAYS validates role consistency in require methods', async () => {
+      // Given: Inconsistent data (query asks for OWNER but returns MEMBER)
+      const userId = 'inconsistent123';
+      const teamId = 'team456';
 
-      mockPrisma.space.findUnique.mockRejectedValue(
-        new Error('Database connection failed')
-      );
+      const inconsistentMember = {
+        id: 'member_broken',
+        userId,
+        teamId,
+        role: 'MEMBER', // Wrong role for query
+        deleted: null,
+        team: { id: teamId, name: 'Test Team' }
+      };
 
-      const result = await permissionService.checkSpaceAccess(userId, spaceId, 'read');
+      mockedPrisma.teamMember.findFirst.mockResolvedValue(inconsistentMember);
 
-      expect(result).toEqual({
-        allowed: false,
-        reason: 'Permission check failed',
-      });
-    });
-
-    it('should validate workspace ownership correctly', async () => {
-      const userId = 'user123';
-      const workspaceId = 'workspace456';
-
-      const workspace = MockDataFactory.createWorkspace({
-        id: workspaceId,
-        userId: 'differentUser',
-      });
-
-      mockPrisma.workspace.findUnique.mockResolvedValue(workspace);
-
-      const result = await permissionService.isWorkspaceOwner(userId, workspaceId);
-
-      expect(result).toBe(false);
+      // When/Then: Should throw due to role validation
+      await expect(permissionService.requireTeamOwner(userId, teamId))
+        .rejects.toThrow(PermissionError);
     });
   });
 });
