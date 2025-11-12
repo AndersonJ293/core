@@ -24,6 +24,7 @@ export const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
     count: jest.fn(),
+    groupBy: jest.fn(),
   },
 
   teamMember: {
@@ -34,6 +35,7 @@ export const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
     count: jest.fn(),
+    groupBy: jest.fn(),
   },
 
   // Space-related models
@@ -45,6 +47,7 @@ export const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
     count: jest.fn(),
+    aggregate: jest.fn(),
   },
 
   // Workspace models
@@ -83,6 +86,41 @@ export const mockPrisma = {
 
   // Other commonly used models
   conversation: {
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    findFirst: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+    count: jest.fn(),
+    groupBy: jest.fn(),
+  },
+
+  // Analytics-related models
+  recallLog: {
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    findFirst: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+    count: jest.fn(),
+    groupBy: jest.fn(),
+  },
+
+  activity: {
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    findFirst: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+    count: jest.fn(),
+    groupBy: jest.fn(),
+  },
+
+  // Space-related extended models
+  spacePattern: {
     findUnique: jest.fn(),
     findMany: jest.fn(),
     findFirst: jest.fn(),

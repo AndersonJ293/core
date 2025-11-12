@@ -82,10 +82,46 @@ jest.mock('ioredis', () => ({
   default: jest.fn(() => ({
     get: jest.fn(),
     set: jest.fn().mockResolvedValue('OK'),
+    setex: jest.fn().mockResolvedValue('OK'),
     del: jest.fn(),
     ping: jest.fn().mockResolvedValue('PONG'),
     quit: jest.fn().mockResolvedValue(undefined),
   })),
+}));
+
+// Mock session storage
+jest.mock('~/services/sessionStorage.server', () => ({
+  sessionStorage: {
+    getSession: jest.fn().mockResolvedValue({
+      get: jest.fn(),
+      set: jest.fn(),
+      unset: jest.fn(),
+    }),
+    commitSession: jest.fn().mockResolvedValue('session-cookie'),
+    destroySession: jest.fn().mockResolvedValue('destroyed-session'),
+  },
+}));
+
+// Mock session service
+jest.mock('~/services/session.server', () => ({
+  requireUser: jest.fn().mockResolvedValue({
+    id: 'test-user-id',
+    email: 'test@example.com',
+  }),
+}));
+
+// Mock team permissions
+jest.mock('~/utils/team-permissions.server', () => ({
+  requireTeamMember: jest.fn().mockResolvedValue({
+    user: { id: 'test-user-id', email: 'test@example.com' },
+    teamId: 'test-team-id',
+    membership: {
+      id: 'test-member-id',
+      userId: 'test-user-id',
+      teamId: 'test-team-id',
+      role: 'MEMBER',
+    },
+  }),
 }));
 
 // Mock logger service

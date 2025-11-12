@@ -11,6 +11,7 @@ export const mockRedisClient = {
   // Basic commands
   get: jest.fn(),
   set: jest.fn().mockResolvedValue('OK'),
+  setex: jest.fn().mockResolvedValue('OK'),
   del: jest.fn(),
   exists: jest.fn(),
   expire: jest.fn(),
@@ -71,6 +72,7 @@ beforeEach(() => {
   // Reset default behaviors
   mockRedisClient.get.mockReset();
   mockRedisClient.set.mockResolvedValue('OK');
+  mockRedisClient.setex.mockResolvedValue('OK');
   mockRedisClient.del.mockResolvedValue(1);
   mockRedisClient.exists.mockResolvedValue(0);
   mockRedisClient.expire.mockResolvedValue(1);
