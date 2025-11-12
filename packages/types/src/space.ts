@@ -3,6 +3,8 @@ export interface SpaceNode {
   name: string;
   description?: string;
   userId: string;
+  teamId?: string | null;
+  visibility?: string; // "PRIVATE", "TEAM", "WORKSPACE"
   createdAt: Date;
   updatedAt: Date;
   isActive: boolean;
@@ -14,6 +16,8 @@ export interface CreateSpaceParams {
   name: string;
   description?: string;
   userId: string;
+  teamId?: string;
+  visibility?: string;
   workspaceId: string;
 }
 
@@ -22,6 +26,8 @@ export interface UpdateSpaceParams {
   description?: string;
   icon?: string;
   status?: string;
+  teamId?: string;
+  visibility?: string;
 }
 
 export interface SpaceWithStatements extends SpaceNode {

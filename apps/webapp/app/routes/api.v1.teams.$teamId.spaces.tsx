@@ -7,6 +7,9 @@ import {
 import { prisma } from "~/db.server";
 import { permissionService } from "~/services/permission.server";
 import { requireUser } from "~/services/session.server";
+import { requireTeamAdmin, requireTeamMember } from "~/utils/team-permissions.server";
+import { checkRateLimit } from "~/utils/rate-limit.server";
+import { AuditService } from "~/services/audit.service";
 import { logger } from "~/services/logger.service";
 
 // Schema for team params
@@ -32,7 +35,7 @@ const { action } = createHybridActionApiRoute(
     corsStrategy: "all",
     authorization: { action: "create_space" },
   },
-  async ({ body, authentication, params }) => {
+  async ({ body, authentication, params, request }) => {
     try {
       const userId = authentication.userId;
       const { teamId } = params;
@@ -41,15 +44,11 @@ const { action } = createHybridActionApiRoute(
         return json({ error: "Team ID is required" }, { status: 400 });
       }
 
-      // Check if user is a member of this team
-      const isMember = await permissionService.isTeamMember(userId, teamId);
+      // Apply rate limiting: 10 team space creations per minute
+      await checkRateLimit(request, 10, 60);
 
-      if (!isMember) {
-        return json(
-          { error: "You must be a team member to create spaces" },
-          { status: 403 },
-        );
-      }
+      // Use middleware to require team admin access
+      await permissionService.requireTeamAdmin(userId, teamId);
 
       // Get team to find workspace
       const team = await prisma.team.findUnique({
@@ -81,6 +80,15 @@ const { action } = createHybridActionApiRoute(
         `Space ${space.id} created for team ${teamId} by user ${userId}`,
       );
 
+      // Log audit trail
+      await AuditService.logSpaceCreate({
+        userId,
+        spaceId: space.id,
+        teamId,
+        visibility,
+        request,
+      });
+
       return json({
         space: {
           id: space.id,
@@ -97,7 +105,9 @@ const { action } = createHybridActionApiRoute(
       });
     } catch (error) {
       logger.error("Error creating space:", error as Record<string, unknown>);
-      return json({ error: "Failed to create space" }, { status: 500 });
+      const errorMessage = error instanceof Response ? error : { error: "Failed to create space" };
+      const status = error instanceof Response ? error.status : 500;
+      return json(errorMessage, { status });
     }
   },
 );
@@ -111,28 +121,8 @@ export const loader = async ({
   request: Request;
 }) => {
   try {
-    const user = await requireUser(request);
-    const { teamId } = params;
-
-    if (!teamId) {
-      return json({ error: "Team ID is required" }, { status: 400 });
-    }
-
-    // Check if user is team member
-    const membership = await prisma.teamMember.findFirst({
-      where: {
-        teamId,
-        userId: user.id,
-        deleted: null,
-      },
-    });
-
-    if (!membership) {
-      return json(
-        { error: "You don't have permission to view this team" },
-        { status: 403 },
-      );
-    }
+    // Use middleware to require team member access
+    const { user, teamId } = await requireTeamMember(request, params.teamId);
 
     // Get team spaces
     const spaces = await prisma.space.findMany({
@@ -160,7 +150,9 @@ export const loader = async ({
     });
   } catch (error) {
     logger.error("Error fetching team spaces:", error);
-    return json({ error: "Failed to fetch spaces" }, { status: 500 });
+    const errorMessage = error instanceof Response ? error : { error: "Failed to fetch spaces" };
+    const status = error instanceof Response ? error.status : 500;
+    return json(errorMessage, { status });
   }
 };
 

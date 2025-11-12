@@ -4,9 +4,15 @@ import { createHybridActionApiRoute } from "~/services/routeBuilders/apiBuilder.
 import { inviteService } from "~/services/inviteService.server";
 import { logger } from "~/services/logger.service";
 
+// Schema for invite ID params
+const InviteParamsSchema = z.object({
+  inviteId: z.string(),
+});
+
 // DELETE /api/v1/invites/:inviteId - Cancel a team invite
 const { action } = createHybridActionApiRoute(
   {
+    params: InviteParamsSchema,
     allowJWT: true,
     method: "DELETE",
     corsStrategy: "all",
@@ -14,8 +20,13 @@ const { action } = createHybridActionApiRoute(
   },
   async ({ authentication, params }: { authentication: any; params: any }) => {
     try {
+      console.log("DEBUG - Params recebidos:", params);
+      console.log("DEBUG - Authentication:", authentication);
+
       const userId = authentication.userId;
       const { inviteId } = params || {};
+
+      console.log("DEBUG - inviteId extraído:", inviteId);
 
       if (!inviteId) {
         return json({ error: "Invite ID is required" }, { status: 400 });

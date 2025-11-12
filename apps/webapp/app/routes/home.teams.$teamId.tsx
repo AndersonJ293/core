@@ -313,7 +313,15 @@ export default function TeamDetailRoute(): JSX.Element {
         {/* Spaces Section */}
         <div className="bg-background-2 rounded-lg p-4">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-medium">Spaces</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-medium">Spaces</h2>
+              <Link
+                to={`/home/teams/${teamId}/spaces`}
+                className="text-xs text-muted-foreground hover:text-primary cursor-pointer"
+              >
+                View all
+              </Link>
+            </div>
             <button
               onClick={() => setShowCreateSpace(true)}
               className="text-primary cursor-pointer text-sm hover:underline"

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -19,25 +19,74 @@ import {
 } from "~/components/ui/select";
 import { Textarea } from "~/components/ui/textarea";
 
+type Team = {
+  id: string;
+  name: string;
+  icon?: string | null;
+};
+
 type CreateSpaceModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  teamId: string;
+  teamId?: string;
   onSuccess?: (space: any) => void;
 };
 
 export function CreateSpaceModal({
   open,
   onOpenChange,
-  teamId,
+  teamId: initialTeamId,
   onSuccess,
 }: CreateSpaceModalProps) {
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [loadingTeams, setLoadingTeams] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [visibility, setVisibility] = useState<"PRIVATE" | "TEAM" | "WORKSPACE">("TEAM");
+  const [teamId, setTeamId] = useState(initialTeamId || "");
   const [icon, setIcon] = useState("📁");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Load teams when modal opens
+  useEffect(() => {
+    if (open && !initialTeamId) {
+      setLoadingTeams(true);
+      fetch("/api/v1/teams", {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            throw new Error(`Failed to load teams: ${res.status}`);
+          }
+          return res.json();
+        })
+        .then((data) => {
+          const teamList: Team[] = data?.teams || [];
+          setTeams(teamList);
+          if (teamList.length > 0 && !teamId) {
+            setTeamId(teamList[0].id);
+          }
+        })
+        .catch((err: any) => {
+          console.error("Error loading teams:", err);
+        })
+        .finally(() => setLoadingTeams(false));
+    }
+  }, [open, initialTeamId]);
+
+  // Reset form when modal closes
+  useEffect(() => {
+    if (!open) {
+      setName("");
+      setDescription("");
+      setVisibility("TEAM");
+      setIcon("📁");
+      setError(null);
+    }
+  }, [open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,24 +96,34 @@ export function CreateSpaceModal({
       return;
     }
 
+    if (!initialTeamId && !teamId) {
+      setError("Please select a team");
+      return;
+    }
+
+    const selectedTeamId = initialTeamId || teamId;
+
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetch(`/api/v1/teams/${encodeURIComponent(teamId)}/spaces`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        credentials: "same-origin",
-        body: JSON.stringify({
-          name: name.trim(),
-          description: description.trim() || undefined,
-          visibility,
-          icon,
-        }),
-      });
+      const response = await fetch(
+        `/api/v1/teams/${encodeURIComponent(selectedTeamId)}/spaces`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            name: name.trim(),
+            description: description.trim() || undefined,
+            visibility,
+            icon,
+          }),
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -78,6 +137,7 @@ export function CreateSpaceModal({
       setDescription("");
       setVisibility("TEAM");
       setIcon("📁");
+      setError(null);
 
       // Close modal
       onOpenChange(false);
@@ -122,6 +182,32 @@ export function CreateSpaceModal({
               </div>
             )}
 
+            {!initialTeamId && (
+              <div className="grid gap-2">
+                <Label htmlFor="team-select">Team</Label>
+                {loadingTeams ? (
+                  <div className="w-full px-3 py-2 border rounded-md text-sm text-muted-foreground">
+                    Loading teams...
+                  </div>
+                ) : (
+                  <select
+                    id="team-select"
+                    value={teamId}
+                    onChange={(e) => setTeamId(e.target.value)}
+                    disabled={loading || loadingTeams}
+                    className="w-full px-3 py-2 h-12 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  >
+                    <option value="">Select a team</option>
+                    {teams.map((team) => (
+                      <option key={team.id} value={team.id}>
+                        {team.icon || "👥"} {team.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
+
             <div className="grid gap-2">
               <Label htmlFor="space-icon">Icon</Label>
               <input
@@ -150,7 +236,18 @@ export function CreateSpaceModal({
                 required
                 disabled={loading}
                 className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                list="space-name-suggestions"
               />
+              <datalist id="space-name-suggestions">
+                <option value="API Documentation" />
+                <option value="Architecture Decisions" />
+                <option value="Best Practices" />
+                <option value="Meeting Notes" />
+                <option value="Project Planning" />
+                <option value="Technical Specs" />
+                <option value="Team Onboarding" />
+                <option value="Troubleshooting Guide" />
+              </datalist>
             </div>
 
             <div className="grid gap-2">
@@ -187,6 +284,25 @@ export function CreateSpaceModal({
                 </option>
               </select>
             </div>
+
+            {visibility === "TEAM" && (
+              <div className="bg-blue-50 dark:bg-blue-950/50 p-4 rounded-md border border-blue-200 dark:border-blue-900">
+                <p className="font-medium text-blue-900 dark:text-blue-100 text-sm mb-2">
+                  🤖 Automatic Classification
+                </p>
+                <p className="text-blue-800 dark:text-blue-200 text-sm">
+                  Memories will be automatically classified to this space based on keywords and content.
+                  Team members can still manually organize memories.
+                </p>
+                {name && (
+                  <div className="mt-2 p-2 bg-white dark:bg-blue-900/30 rounded border border-blue-200 dark:border-blue-800">
+                    <p className="text-xs text-blue-700 dark:text-blue-300">
+                      <strong>Preview:</strong> "{name}" will receive memories containing keywords from the description and space name.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <DialogFooter>
@@ -201,7 +317,7 @@ export function CreateSpaceModal({
             </Button>
             <Button
               type="submit"
-              disabled={loading}
+              disabled={loading || loadingTeams || (!initialTeamId && !teamId)}
               className="cursor-pointer"
             >
               {loading ? "Creating..." : "Create Space"}

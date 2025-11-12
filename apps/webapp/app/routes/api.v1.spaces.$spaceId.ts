@@ -8,6 +8,11 @@ import { SpaceService } from "~/services/space.server";
 import { json } from "@remix-run/node";
 import { apiCors } from "~/utils/apiCors";
 import { getSpace } from "~/trigger/utils/space-utils";
+import { permissionService } from "~/services/permission.server";
+import { requireSpaceReadAccess, requireSpaceWriteAccess } from "~/utils/team-permissions.server";
+import { checkRateLimit } from "~/utils/rate-limit.server";
+import { AuditService } from "~/services/audit.service";
+import { prisma } from "~/db.server";
 
 const spaceService = new SpaceService();
 
@@ -41,6 +46,9 @@ const { action } = createHybridActionApiRoute(
         return json({ error: "No updates provided" }, { status: 400 });
       }
 
+      // Apply rate limiting: 20 space updates per minute
+      await checkRateLimit(request, 20, 60);
+
       const parseResult = UpdateSpaceSchema.safeParse(body);
       if (!parseResult.success) {
         return json(
@@ -49,6 +57,26 @@ const { action } = createHybridActionApiRoute(
         );
       }
 
+      // Get space to check if it's a Profile space
+      const space = await prisma.space.findUnique({
+        where: { id: spaceId },
+      });
+
+      if (!space) {
+        return json({ error: "Space not found" }, { status: 404 });
+      }
+
+      // Check if Profile space
+      if (space.name.toLowerCase() === "profile") {
+        return json(
+          { error: "Can't modify Profile space" },
+          { status: 403 },
+        );
+      }
+
+      // Use middleware to require write access
+      const { user } = await requireSpaceWriteAccess(request);
+
       const updates: any = {};
       if (parseResult.data.name !== undefined)
         updates.name = parseResult.data.name;
@@ -56,27 +84,76 @@ const { action } = createHybridActionApiRoute(
       if (parseResult.data.description !== undefined)
         updates.description = parseResult.data.description;
 
-      const space = await spaceService.updateSpace(spaceId, updates, userId);
-      return json({ space, success: true });
+      const updatedSpace = await spaceService.updateSpace(spaceId, updates, userId);
+
+      // Log audit trail
+      await AuditService.logSpaceUpdate({
+        userId,
+        spaceId,
+        changes: updates,
+        request,
+      });
+
+      return json({ space: updatedSpace, success: true });
     }
 
     if (request.method === "DELETE") {
       try {
-        const space = await getSpace(spaceId);
+        // Apply rate limiting: 10 space deletions per minute
+        await checkRateLimit(request, 10, 60);
 
-        if (space?.name.toLowerCase() === "profile") {
-          throw new Error("You can't delete Profile space");
+        // Get space with team information
+        const space = await prisma.space.findUnique({
+          where: { id: spaceId },
+        });
+
+        if (!space) {
+          return json({ error: "Space not found" }, { status: 404 });
         }
 
-        // Delete space
-        await spaceService.deleteSpace(spaceId, userId);
+        if (space.name.toLowerCase() === "profile") {
+          return json(
+            { error: "You can't delete Profile space" },
+            { status: 403 },
+          );
+        }
+
+        // Check if user is team owner if it's a team space
+        if (space.teamId) {
+          const isOwner = await permissionService.isTeamOwner(userId, space.teamId);
+          if (!isOwner) {
+            return json(
+              { error: "You must be a team owner to delete team spaces" },
+              { status: 403 },
+            );
+          }
+        } else {
+          // For non-team spaces, use middleware to check write permission
+          const { user } = await requireSpaceWriteAccess(request);
+        }
+
+        // Soft delete: update deletedAt timestamp
+        await prisma.space.update({
+          where: { id: spaceId },
+          data: { deletedAt: new Date() },
+        });
+
+        // Log audit trail
+        await AuditService.logSpaceDelete({
+          userId,
+          spaceId,
+          request,
+        });
 
         return json({
           success: true,
           message: "Space deleted successfully",
         });
-      } catch (e) {
-        return json({ error: e }, { status: 400 });
+      } catch (error) {
+        return json(
+          { error: "Failed to delete space" },
+          { status: 400 },
+        );
       }
     }
 
@@ -96,10 +173,20 @@ const loader = createHybridLoaderApiRoute(
       return apiCors(request, json({}));
     }
 
+    const userId = authentication.userId;
+    const { spaceId } = params;
+
+    if (!spaceId) {
+      return json({ error: "Space ID is required" }, { status: 400 });
+    }
+
+    // Use middleware to require read access
+    await permissionService.checkSpaceAccess(userId, spaceId, 'read');
+
     // Get space details
     const space = await spaceService.getSpace(
-      params.spaceId,
-      authentication.userId,
+      spaceId,
+      userId,
     );
 
     if (!space) {

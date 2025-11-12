@@ -6,6 +6,7 @@ import {
 import { SpaceService } from "~/services/space.server";
 import { json } from "@remix-run/node";
 import { prisma } from "~/db.server";
+import { permissionService } from "~/services/permission.server";
 import { apiCors } from "~/utils/apiCors";
 import { isTriggerDeployment } from "~/lib/queue-adapter.server";
 
@@ -13,8 +14,10 @@ const spaceService = new SpaceService();
 
 // Schema for creating spaces
 const CreateSpaceSchema = z.object({
-  name: z.string(),
+  name: z.string().min(1).max(100),
   description: z.string().optional(),
+  teamId: z.string().optional(),
+  visibility: z.enum(["PRIVATE", "TEAM", "WORKSPACE"]).default("PRIVATE")
 });
 
 // Search query schema
@@ -67,11 +70,28 @@ const { action } = createHybridActionApiRoute(
         );
       }
 
+      // Validate team membership if teamId is provided
+      if (body.teamId) {
+        const isMember = await permissionService.isTeamMember(
+          authentication.userId,
+          body.teamId,
+        );
+
+        if (!isMember) {
+          return json(
+            { error: "You must be a team member to create team spaces" },
+            { status: 403 },
+          );
+        }
+      }
+
       const space = await spaceService.createSpace({
         name: body.name,
         description: body.description,
         userId: authentication.userId,
         workspaceId: user.Workspace.id,
+        teamId: body.teamId,
+        visibility: body.visibility,
       });
 
       return json({ space, success: true });

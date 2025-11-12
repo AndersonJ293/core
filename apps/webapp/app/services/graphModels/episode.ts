@@ -132,6 +132,7 @@ export async function getRecentEpisodes(params: {
       labels: episode.labels,
       userId: episode.userId,
       space: episode.space,
+      spaceIds: episode.spaceIds,
       sessionId: episode.sessionId,
       documentId: episode.documentId,
     };
@@ -369,6 +370,49 @@ export async function getStatementsInvalidatedByEpisode(params: {
       invalidAt: stmt.invalidAt ? new Date(stmt.invalidAt) : null,
       attributes: stmt.attributesJson ? JSON.parse(stmt.attributesJson) : {},
       userId: stmt.userId,
+    };
+  });
+}
+
+export async function searchEpisodes(
+  query: string,
+  userId: string,
+  spaceIds?: string[]
+): Promise<EpisodicNode[]> {
+  // 1. Build filter
+  const spaceFilter = spaceIds && spaceIds.length > 0
+    ? `AND (ANY(spaceId IN e.spaceIds WHERE spaceId IN $spaceIds))`
+    : '';
+
+  const cypher = `
+    MATCH (e:Episode)
+    WHERE e.userId = $userId
+      ${spaceFilter}
+      AND e.invalidAt IS NULL
+    RETURN e
+    ORDER BY e.createdAt DESC
+    LIMIT 50
+  `;
+
+  const result = await runQuery(cypher, { userId, spaceIds });
+
+  return result.map((record) => {
+    const episode = record.get("e").properties;
+    return {
+      uuid: episode.uuid,
+      content: episode.content,
+      originalContent: episode.originalContent,
+      contentEmbedding: episode.contentEmbedding,
+      metadata: JSON.parse(episode.metadata || "{}"),
+      source: episode.source,
+      createdAt: new Date(episode.createdAt),
+      validAt: new Date(episode.validAt),
+      labels: episode.labels,
+      userId: episode.userId,
+      space: episode.space,
+      spaceIds: episode.spaceIds,
+      sessionId: episode.sessionId,
+      documentId: episode.documentId,
     };
   });
 }

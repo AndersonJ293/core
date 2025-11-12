@@ -58,8 +58,8 @@ async function main() {
   }
 
   // Team member
-  const existingMember = await prisma.teamMember.findUnique({
-    where: { teamId_userId: { teamId: team.id, userId: user.id } },
+  const existingMember = await prisma.teamMember.findFirst({
+    where: { teamId: team.id, userId: user.id },
   });
 
   if (!existingMember) {

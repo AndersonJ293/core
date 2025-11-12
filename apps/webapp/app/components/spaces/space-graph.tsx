@@ -26,8 +26,7 @@ export default function SpaceGraph({ userId, clusterId }: SpaceGraphProps) {
   // Determine loading state
   const loading =
     fetcher.state === "loading" ||
-    fetcher.state === "submitting" ||
-    !fetcher.data;
+    fetcher.state === "submitting";
 
   // Get graph data from fetcher
   let graphData: any = null;
@@ -37,6 +36,17 @@ export default function SpaceGraph({ userId, clusterId }: SpaceGraphProps) {
     graphData = { triplets: [], clusters: [] };
   }
 
+  // Handle empty state - if no data loaded yet, set to empty
+  if (!graphData) {
+    graphData = { triplets: [], clusters: [] };
+  }
+
+  // Check if there's any data for this specific cluster
+  const hasClusterData = graphData.clusters?.some((cluster: any) =>
+    cluster.id === clusterId
+  );
+  const hasTriplets = graphData.triplets && graphData.triplets.length > 0;
+
   return (
     <div className="home bg-grayAlpha-100 mb-10 flex h-[500px] flex-col overflow-y-auto rounded-lg p-3 text-base">
       <div className="flex grow items-center justify-center rounded">
@@ -45,9 +55,17 @@ export default function SpaceGraph({ userId, clusterId }: SpaceGraphProps) {
             <LoaderCircle size={18} className="mr-1 animate-spin" />
             <span className="text-muted-foreground">Loading graph...</span>
           </div>
+        ) : !hasTriplets ? (
+          <div className="flex h-full w-full flex-col items-center justify-center text-center">
+            <div className="text-muted-foreground mb-2">
+              No memories found in this space
+            </div>
+            <div className="text-sm text-muted-foreground">
+              Add some conversations or documents to see the knowledge graph
+            </div>
+          </div>
         ) : (
-          typeof window !== "undefined" &&
-          graphData && (
+          typeof window !== "undefined" && (
             <GraphVisualizationClient
               triplets={graphData.triplets || []}
               clusters={graphData.clusters || []}

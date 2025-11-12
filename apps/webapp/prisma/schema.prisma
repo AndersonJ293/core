@@ -566,6 +566,7 @@ model User {
   UserUsage               UserUsage?
   RecallLog               RecallLog[]
   TeamMember              TeamMember[]
+  AuditLog                AuditLog[]
 }
 
 model UserUsage {
@@ -623,6 +624,37 @@ model WebhookDeliveryLog {
   deliveredAt        DateTime              @default(now())
 
   createdAt DateTime @default(now())
+}
+
+model RateLimitCounter {
+  key         String   @id
+  count       Int      @default(0)
+  windowStart DateTime @default(now())
+
+  @@index([key])
+  @@index([windowStart])
+}
+
+model AuditLog {
+  id         String            @id @default(cuid())
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  userId     String
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  action     String
+  resource   String
+  resourceId String
+  metadata   String?
+  ipAddress  String
+  userAgent  String
+  status     AuditLogStatus    @default(success)
+
+  @@index([userId])
+  @@index([resource, resourceId])
+  @@index([action])
+  @@index([createdAt])
 }
 
 model Subscription {
@@ -758,6 +790,11 @@ enum UserType {
 enum WebhookDeliveryStatus {
   SUCCESS
   FAILED
+}
+
+enum AuditLogStatus {
+  success
+  failure
 }
 
 model Team {

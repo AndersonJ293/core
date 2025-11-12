@@ -14,6 +14,8 @@ export async function createSpace(
   name: string,
   description: string | undefined,
   userId: string,
+  teamId?: string,
+  visibility?: string,
 ): Promise<SpaceNode> {
   const query = `
     CREATE (s:Space {
@@ -21,6 +23,8 @@ export async function createSpace(
       name: $name,
       description: $description,
       userId: $userId,
+      teamId: $teamId,
+      visibility: $visibility,
       createdAt: datetime(),
       updatedAt: datetime(),
       isActive: true
@@ -28,7 +32,14 @@ export async function createSpace(
     RETURN s
   `;
 
-  const result = await runQuery(query, { spaceId, name, description, userId });
+  const result = await runQuery(query, {
+    spaceId,
+    name,
+    description,
+    userId,
+    teamId: teamId || null,
+    visibility: visibility || 'PRIVATE',
+  });
   if (result.length === 0) {
     throw new Error("Failed to create space");
   }
@@ -39,6 +50,8 @@ export async function createSpace(
     name: spaceData.name,
     description: spaceData.description,
     userId: spaceData.userId,
+    teamId: spaceData.teamId,
+    visibility: spaceData.visibility,
     createdAt: new Date(spaceData.createdAt),
     updatedAt: new Date(spaceData.updatedAt),
     isActive: spaceData.isActive,
@@ -76,6 +89,8 @@ export async function getSpace(
     name: spaceData.name,
     description: spaceData.description,
     userId: spaceData.userId,
+    teamId: spaceData.teamId,
+    visibility: spaceData.visibility,
     createdAt: new Date(spaceData.createdAt),
     updatedAt: new Date(spaceData.updatedAt),
     isActive: spaceData.isActive,
@@ -88,7 +103,7 @@ export async function getSpace(
  */
 export async function updateSpace(
   spaceId: string,
-  updates: { name?: string; description?: string },
+  updates: { name?: string; description?: string; teamId?: string; visibility?: string },
   userId: string,
 ): Promise<SpaceNode> {
   const setClause = [];
@@ -102,6 +117,16 @@ export async function updateSpace(
   if (updates.description !== undefined) {
     setClause.push("s.description = $description");
     params.description = updates.description;
+  }
+
+  if (updates.teamId !== undefined) {
+    setClause.push("s.teamId = $teamId");
+    params.teamId = updates.teamId;
+  }
+
+  if (updates.visibility !== undefined) {
+    setClause.push("s.visibility = $visibility");
+    params.visibility = updates.visibility;
   }
 
   if (setClause.length === 0) {
@@ -128,6 +153,8 @@ export async function updateSpace(
     name: spaceData.name,
     description: spaceData.description,
     userId: spaceData.userId,
+    teamId: spaceData.teamId,
+    visibility: spaceData.visibility,
     createdAt: new Date(spaceData.createdAt),
     updatedAt: new Date(spaceData.updatedAt),
     isActive: spaceData.isActive,
@@ -388,3 +415,76 @@ export async function getSpacesForEpisodes(
 
   return spacesMap;
 }
+
+/**
+ * Get spaces by team
+ */
+export async function getSpacesByTeam(
+  teamId: string,
+  userId: string,
+): Promise<SpaceNode[]> {
+  const query = `
+    MATCH (s:Space {teamId: $teamId, isActive: true})
+    WHERE s.userId = $userId
+      OR s.visibility = 'TEAM'
+      OR s.visibility = 'WORKSPACE'
+    RETURN s
+    ORDER BY s.name
+  `;
+
+  const result = await runQuery(query, { teamId, userId });
+  return result.map((record) => {
+    const s = record.get("s").properties;
+    return {
+      uuid: s.uuid,
+      name: s.name,
+      description: s.description,
+      userId: s.userId,
+      teamId: s.teamId,
+      visibility: s.visibility,
+      createdAt: new Date(s.createdAt),
+      updatedAt: new Date(s.updatedAt),
+      isActive: s.isActive,
+    };
+  });
+}
+
+/**
+ * Get spaces for user
+ */
+export async function getSpacesForUser(
+  userId: string,
+  workspaceId: string,
+): Promise<SpaceNode[]> {
+  const query = `
+    MATCH (s:Space {isActive: true})
+    WHERE
+      // Personal spaces
+      (s.userId = $userId AND s.visibility = 'PRIVATE')
+      OR
+      // Team spaces
+      (s.teamId IN [t.id WHERE t:Team])
+      OR
+      // Workspace spaces
+      (s.visibility = 'WORKSPACE')
+    RETURN DISTINCT s
+    ORDER BY s.name
+  `;
+
+  const result = await runQuery(query, { userId, workspaceId });
+  return result.map((record) => {
+    const s = record.get("s").properties;
+    return {
+      uuid: s.uuid,
+      name: s.name,
+      description: s.description,
+      userId: s.userId,
+      teamId: s.teamId,
+      visibility: s.visibility,
+      createdAt: new Date(s.createdAt),
+      updatedAt: new Date(s.updatedAt),
+      isActive: s.isActive,
+    };
+  });
+}
+

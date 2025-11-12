@@ -14,31 +14,49 @@ export const getIcon = (
   className?: string,
 ) => {
   if (icon) {
-    const iconData = JSON.parse(icon);
+    // Check if icon is a direct emoji (string that doesn't look like JSON)
+    if (icon.startsWith('{') || icon.startsWith('[')) {
+      try {
+        const iconData = JSON.parse(icon);
 
-    if (iconData.icon) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const IconComponent = (LucideIcons as any)[iconData.icon];
+        if (iconData.icon) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const IconComponent = (LucideIcons as any)[iconData.icon];
 
-      return (
-        <IconComponent
-          size={size}
-          style={iconData?.color !== "#000" ? { color: iconData.color } : {}}
-          className={cn("text-foreground shrink-0", className)}
-        />
-      );
+          return (
+            <IconComponent
+              size={size}
+              style={iconData?.color !== "#000" ? { color: iconData.color } : {}}
+              className={cn("text-foreground shrink-0", className)}
+            />
+          );
+        }
+
+        if (iconData.emoji) {
+          return (
+            <div
+              className="flex shrink-0 items-center"
+              style={{ fontSize: size * 0.8 }}
+            >
+              {iconData.emoji}
+            </div>
+          );
+        }
+      } catch (error) {
+        // If JSON.parse fails, treat as raw emoji
+        console.warn('Failed to parse icon data, treating as emoji:', error);
+      }
     }
 
-    if (iconData.emoji) {
-      return (
-        <div
-          className="flex shrink-0 items-center"
-          style={{ fontSize: size * 0.8 }}
-        >
-          {iconData.emoji}
-        </div>
-      );
-    }
+    // If not JSON or JSON parse failed, treat as raw emoji
+    return (
+      <div
+        className="flex shrink-0 items-center"
+        style={{ fontSize: size * 0.8 }}
+      >
+        {icon}
+      </div>
+    );
   }
 
   return <Project size={size} className={cn("shrink-0", className)} />;
