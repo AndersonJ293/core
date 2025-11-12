@@ -40,6 +40,35 @@
     "trigger:deploy": {
       "interactive": true,
       "cache": false
+    },
+    "test": {
+      "dependsOn": [ "^build" ],
+      "outputs": [ "coverage/**", "test-results/**" ],
+      "cache": false
+    },
+    "test:unit": {
+      "dependsOn": [ "^build" ],
+      "outputs": [ "coverage/**" ],
+      "cache": false
+    },
+    "test:integration": {
+      "dependsOn": [ "^build" ],
+      "outputs": [ "coverage/**", "test-results/**" ],
+      "cache": false
+    },
+    "test:e2e": {
+      "dependsOn": [ "^build" ],
+      "outputs": [ "playwright-report/**", "test-results/**" ],
+      "cache": false
+    },
+    "test:watch": {
+      "dependsOn": [ "^build" ],
+      "cache": false
+    },
+    "test:coverage": {
+      "dependsOn": [ "^build" ],
+      "outputs": [ "coverage/**" ],
+      "cache": false
     }
   },
   "globalDependencies": [ ".env" ],

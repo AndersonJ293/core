@@ -2,8 +2,9 @@ import { prisma } from "~/trigger/utils/prisma";
 import { logger } from "./logger.service";
 
 export class PermissionService {
+  constructor(private prismaClient = prisma) {}
   async isTeamMember(userId: string, teamId: string): Promise<boolean> {
-    const membership = await prisma.teamMember.findFirst({
+    const membership = await this.prismaClient.teamMember.findFirst({
       where: {
         teamId,
         userId,
@@ -11,11 +12,11 @@ export class PermissionService {
       },
     });
 
-    return membership !== null;
+    return membership !== null && !membership.deleted;
   }
 
   async isTeamOwner(userId: string, teamId: string): Promise<boolean> {
-    const membership = await prisma.teamMember.findFirst({
+    const membership = await this.prismaClient.teamMember.findFirst({
       where: {
         teamId,
         userId,
@@ -24,14 +25,15 @@ export class PermissionService {
       },
     });
 
-    return membership !== null;
+    // Defensive check: ensure returned membership actually has OWNER role (protects against mock bugs)
+    return membership !== null && !membership.deleted && membership.role === "OWNER";
   }
 
   async getUserTeamRole(
     userId: string,
     teamId: string,
   ): Promise<string | null> {
-    const membership = await prisma.teamMember.findFirst({
+    const membership = await this.prismaClient.teamMember.findFirst({
       where: {
         teamId,
         userId,
@@ -39,11 +41,11 @@ export class PermissionService {
       },
     });
 
-    return membership?.role || null;
+    return (membership && !membership.deleted) ? membership.role : null;
   }
 
   async canReadSpace(userId: string, spaceId: string): Promise<boolean> {
-    const space = await prisma.space.findUnique({
+    const space = await this.prismaClient.space.findUnique({
       where: { id: spaceId },
       include: {
         team: {
@@ -85,7 +87,7 @@ export class PermissionService {
   }
 
   async canWriteSpace(userId: string, spaceId: string): Promise<boolean> {
-    const space = await prisma.space.findUnique({
+    const space = await this.prismaClient.space.findUnique({
       where: { id: spaceId },
       include: {
         team: {
@@ -119,8 +121,17 @@ export class PermissionService {
     }
 
     if (space.visibility === "TEAM" && space.teamId) {
-      const isTeamMember = space.team?.members && space.team.members.length > 0;
-      return isWorkspaceOwner || !!isTeamMember;
+      // Workspace owners can always write to team spaces (ultimate override)
+      if (isWorkspaceOwner) {
+        return true;
+      }
+
+      const membership = space.team?.members?.[0];
+      if (!membership) {
+        return false; // Not a team member
+      }
+      // Only OWNER, ADMIN, MEMBER can write (not VIEWER)
+      return ['OWNER', 'ADMIN', 'MEMBER'].includes(membership.role);
     }
 
     return isWorkspaceOwner;
@@ -130,7 +141,7 @@ export class PermissionService {
     userId: string,
     workspaceId: string,
   ): Promise<string[]> {
-    const workspace = await prisma.workspace.findUnique({
+    const workspace = await this.prismaClient.workspace.findUnique({
       where: { id: workspaceId },
     });
 
@@ -140,7 +151,7 @@ export class PermissionService {
 
     const isWorkspaceOwner = workspace.userId === userId;
 
-    const teamMemberships = await prisma.teamMember.findMany({
+    const teamMemberships = await this.prismaClient.teamMember.findMany({
       where: {
         userId,
         deleted: null,
@@ -152,7 +163,7 @@ export class PermissionService {
 
     const teamIds = teamMemberships.map((m) => m.teamId);
 
-    const spaces = await prisma.space.findMany({
+    const spaces = await this.prismaClient.space.findMany({
       where: {
         workspaceId,
         OR: [
@@ -180,7 +191,7 @@ export class PermissionService {
   }
 
   async getUserTeams(userId: string, workspaceId: string) {
-    return await prisma.team.findMany({
+    return await this.prismaClient.team.findMany({
       where: {
         workspaceId,
         members: {
@@ -224,7 +235,7 @@ export class PermissionService {
     teamId: string,
     action: "view" | "edit" | "delete" | "invite" | "remove_member",
   ): Promise<boolean> {
-    const membership = await prisma.teamMember.findFirst({
+    const membership = await this.prismaClient.teamMember.findFirst({
       where: {
         teamId,
         userId,
@@ -232,7 +243,7 @@ export class PermissionService {
       },
     });
 
-    if (!membership) {
+    if (!membership || membership.deleted) {
       return false;
     }
 
@@ -240,14 +251,26 @@ export class PermissionService {
       return true;
     }
 
-    return membership.role === "OWNER";
+    // Role hierarchy: OWNER > ADMIN > MEMBER > VIEWER
+    switch (action) {
+      case "edit":
+        return ["OWNER", "ADMIN"].includes(membership.role);
+      case "invite":
+        return ["OWNER", "ADMIN"].includes(membership.role);
+      case "remove_member":
+        return ["OWNER", "ADMIN"].includes(membership.role);
+      case "delete":
+        return membership.role === "OWNER";
+      default:
+        return false;
+    }
   }
 
   async isWorkspaceOwner(
     userId: string,
     workspaceId: string,
   ): Promise<boolean> {
-    const workspace = await prisma.workspace.findUnique({
+    const workspace = await this.prismaClient.workspace.findUnique({
       where: {
         id: workspaceId,
       },
@@ -284,12 +307,12 @@ export class PermissionService {
 
   // NEW: Require team member
   async requireTeamMember(userId: string, teamId: string) {
-    const membership = await prisma.teamMember.findFirst({
+    const membership = await this.prismaClient.teamMember.findFirst({
       where: { userId, teamId, deleted: null },
       include: { team: true }
     });
 
-    if (!membership) {
+    if (!membership || membership.deleted) {
       throw new PermissionError(`User ${userId} is not a member of team ${teamId}`);
     }
 
@@ -298,7 +321,7 @@ export class PermissionService {
 
   // NEW: Require team admin/owner
   async requireTeamAdmin(userId: string, teamId: string) {
-    const membership = await prisma.teamMember.findFirst({
+    const membership = await this.prismaClient.teamMember.findFirst({
       where: {
         userId,
         teamId,
@@ -308,7 +331,12 @@ export class PermissionService {
       include: { team: true }
     });
 
-    if (!membership) {
+    if (!membership || membership.deleted) {
+      throw new PermissionError(`User ${userId} is not an admin of team ${teamId}`);
+    }
+
+    // Additional validation to ensure role matches expected (defensive check for mocks)
+    if (!['OWNER', 'ADMIN'].includes(membership.role)) {
       throw new PermissionError(`User ${userId} is not an admin of team ${teamId}`);
     }
 
@@ -317,7 +345,7 @@ export class PermissionService {
 
   // NEW: Require team owner only
   async requireTeamOwner(userId: string, teamId: string) {
-    const membership = await prisma.teamMember.findFirst({
+    const membership = await this.prismaClient.teamMember.findFirst({
       where: {
         userId,
         teamId,
@@ -327,7 +355,12 @@ export class PermissionService {
       include: { team: true }
     });
 
-    if (!membership) {
+    if (!membership || membership.deleted) {
+      throw new PermissionError(`User ${userId} is not the owner of team ${teamId}`);
+    }
+
+    // Additional validation to ensure role matches expected (defensive check for mocks)
+    if (membership.role !== 'OWNER') {
       throw new PermissionError(`User ${userId} is not the owner of team ${teamId}`);
     }
 
@@ -341,7 +374,7 @@ export class PermissionService {
     action: 'read' | 'write' | 'admin'
   ): Promise<{ allowed: boolean; reason?: string }> {
     try {
-      const space = await prisma.space.findUnique({
+      const space = await this.prismaClient.space.findUnique({
         where: { id: spaceId },
         include: {
           team: {
@@ -386,7 +419,7 @@ export class PermissionService {
         // Write actions
         if (action === 'write') {
           // For team spaces, check write permission based on space settings
-          // All members can write by default unless specified otherwise
+          // Only OWNER, ADMIN, MEMBER can write (not VIEWER)
           const allowed = ['OWNER', 'ADMIN', 'MEMBER'].includes(membership.role);
           return {
             allowed,
@@ -398,12 +431,12 @@ export class PermissionService {
         return { allowed: true };
       }
 
-      // Workspace space: all workspace members
+      // Workspace space: only workspace owner
       if (space.visibility === 'WORKSPACE') {
-        const isWorkspaceMember = space.Workspace.userId === userId;
+        const isWorkspaceOwner = space.Workspace.userId === userId;
         return {
-          allowed: isWorkspaceMember,
-          reason: isWorkspaceMember ? undefined : 'Not a workspace member'
+          allowed: isWorkspaceOwner,
+          reason: isWorkspaceOwner ? undefined : 'Not a workspace owner'
         };
       }
 
@@ -445,7 +478,7 @@ export class PermissionService {
     // Cache key: `user:${userId}:accessible_spaces`
 
     // Personal spaces
-    const personalSpaces = await prisma.space.findMany({
+    const personalSpaces = await this.prismaClient.space.findMany({
       where: {
         workspaceId,
         visibility: 'PRIVATE',
@@ -458,7 +491,7 @@ export class PermissionService {
     }
 
     // Team spaces
-    const teamMemberships = await prisma.teamMember.findMany({
+    const teamMemberships = await this.prismaClient.teamMember.findMany({
       where: { userId, deleted: null },
       include: {
         team: {
