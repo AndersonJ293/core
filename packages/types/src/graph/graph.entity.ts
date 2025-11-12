@@ -36,6 +36,7 @@ export interface EpisodicNode {
   labels: string[];
   userId: string;
   space?: string;
+  teamId?: string; // Team context for team-aware episodes
   sessionId?: string;
   recallCount?: number;
   chunkIndex?: number; // Index of this chunk within the document
@@ -56,6 +57,7 @@ export interface EntityNode {
   createdAt: Date;
   userId: string;
   space?: string;
+  teamId?: string; // Team context for team-aware entities
 }
 
 /**
@@ -73,6 +75,7 @@ export interface StatementNode {
   attributes: Record<string, any>;
   userId: string;
   space?: string; // Legacy field - deprecated in favor of spaceIds
+  teamId?: string; // Team context for team-aware statements
   spaceIds?: string[]; // Array of space UUIDs this statement belongs to
   recallCount?: { low: number; high: number };
   provenanceCount?: number;
@@ -111,6 +114,7 @@ export type AddEpisodeParams = {
   source: string;
   userId: string;
   spaceId?: string;
+  teamId?: string;
   sessionId?: string;
   type?: EpisodeType;
 };

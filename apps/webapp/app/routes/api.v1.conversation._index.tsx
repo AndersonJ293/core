@@ -33,6 +33,7 @@ import {
 
 import { getModel } from "~/lib/model.server";
 import { UserTypeEnum } from "@core/types";
+import { teamService } from "~/services/team.server";
 import {
   getOrCreatePersonalAccessToken,
   deletePersonalAccessTokenByName,
@@ -94,7 +95,10 @@ const { loader, action } = createHybridActionApiRoute(
         ? env.APP_ORIGIN
         : env.APP_ORIGIN ?? "http://localhost:3000";
 
-    const apiEndpoint = `${apiBase.replace(/\/$/, "")}/api/v1/mcp?source=core`;
+    // Detect active team for user (if any)
+    const activeTeamId = await teamService.getActiveTeam(authentication.userId);
+
+    const apiEndpoint = `${apiBase.replace(/\/$/, "")}/api/v1/mcp?source=core${activeTeamId ? `&teamId=${activeTeamId}` : ''}`;
     const url = new URL(apiEndpoint);
 
 

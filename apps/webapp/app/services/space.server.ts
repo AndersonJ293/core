@@ -90,9 +90,9 @@ export class SpaceService {
   }
 
   /**
-   * Get all spaces for a user
+   * Get all spaces for a user, optionally filtered by team
    */
-  async getUserSpaces(userId: string): Promise<Space[]> {
+  async getUserSpaces(userId: string, teamId?: string): Promise<Space[]> {
     const user = await prisma.user.findFirst({
       where: {
         id: userId,
@@ -102,10 +102,18 @@ export class SpaceService {
       },
     });
 
+    // Build filter conditions
+    const whereCondition: any = {
+      workspaceId: user?.Workspace?.id,
+    };
+
+    // If teamId is provided, filter by team spaces only
+    if (teamId) {
+      whereCondition.teamId = teamId;
+    }
+
     return await prisma.space.findMany({
-      where: {
-        workspaceId: user?.Workspace?.id,
-      },
+      where: whereCondition,
     });
   }
 

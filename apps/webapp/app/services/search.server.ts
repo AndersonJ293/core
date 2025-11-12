@@ -70,6 +70,7 @@ export class SearchService {
       useLLMValidation: options.useLLMValidation || true,
       qualityThreshold: options.qualityThreshold || 0.3,
       maxEpisodesForLLM: options.maxEpisodesForLLM || 20,
+      teamId: options.teamId || null,
     };
 
     // Enhance query with LLM to transform keyword soup into semantic query
@@ -78,15 +79,15 @@ export class SearchService {
 
     // Note: We still need to extract entities from graph for Episode Graph search
     // The LLM entities are just strings, we need EntityNode objects from the graph
-    const entities = await extractEntitiesFromQuery(query, userId, []);
+    const entities = await extractEntitiesFromQuery(query, userId, [], opts.teamId);
     logger.info(`Extracted entities ${entities.map((e: EntityNode) => e.name).join(', ')}`);
 
     // 1. Run parallel search methods (including episode graph search) using enhanced query
     const [bm25Results, vectorResults, bfsResults, episodeGraphResults] = await Promise.all([
-      performBM25Search(query, userId, opts),
-      performVectorSearch(queryVector, userId, opts),
-      performBfsSearch(query, queryVector, userId, entities, opts),
-      performEpisodeGraphSearch(query, entities, queryVector, userId, opts),
+      performBM25Search(query, userId, opts, opts.teamId),
+      performVectorSearch(queryVector, userId, opts, opts.teamId),
+      performBfsSearch(query, queryVector, userId, entities, opts, opts.teamId),
+      performEpisodeGraphSearch(query, entities, queryVector, userId, opts, opts.teamId),
     ]);
 
     logger.info(
@@ -1007,6 +1008,7 @@ export interface SearchOptions {
   scoreThreshold?: number;
   minResults?: number;
   spaceIds?: string[]; // Filter results by specific spaces
+  teamId?: string; // Filter results by team (team-aware search)
   adaptiveFiltering?: boolean;
   structured?: boolean; // Return structured JSON instead of markdown (default: false)
   useLLMValidation?: boolean; // Use LLM to validate episodes for borderline confidence cases (default: false)

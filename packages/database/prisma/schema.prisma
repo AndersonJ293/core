@@ -469,6 +469,7 @@ model RecallLog {
 model Space {
   id           String   @id @default(cuid())
   name         String
+  slug         String
   description  String?
   autoMode     Boolean  @default(false)
   summary      String?
@@ -497,6 +498,7 @@ model Space {
   updatedAt    DateTime       @updatedAt
   SpacePattern SpacePattern[]
 
+  @@unique([workspaceId, teamId, slug])
   @@index([teamId])
   @@index([visibility])
 }

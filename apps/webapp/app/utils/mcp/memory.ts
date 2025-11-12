@@ -238,7 +238,7 @@ export async function callMemoryTool(
       case "memory_search":
         return await handleMemorySearch({ ...args, userId, source });
       case "memory_get_spaces":
-        return await handleMemoryGetSpaces(userId);
+        return await handleMemoryGetSpaces(userId, args.teamId);
       case "memory_about_user":
         return await handleUserProfile(userId);
       case "memory_get_space":
@@ -334,6 +334,7 @@ async function handleMemoryIngest(args: any) {
         source: args.source,
         type: EpisodeTypeEnum.CONVERSATION,
         spaceIds,
+        teamId: args.teamId, // Pass teamId for team context
       },
       args.userId,
     );
@@ -377,6 +378,7 @@ async function handleMemorySearch(args: any) {
         startTime: args.startTime ? new Date(args.startTime) : undefined,
         endTime: args.endTime ? new Date(args.endTime) : undefined,
         spaceIds,
+        teamId: args.teamId, // Pass teamId for team-aware search
       },
       args.source,
     );
@@ -404,9 +406,9 @@ async function handleMemorySearch(args: any) {
 }
 
 // Handler for memory_get_spaces
-async function handleMemoryGetSpaces(userId: string) {
+async function handleMemoryGetSpaces(userId: string, teamId?: string) {
   try {
-    const spaces = await spaceService.getUserSpaces(userId);
+    const spaces = await spaceService.getUserSpaces(userId, teamId);
 
     // Return id, name, and description for listing
     const simplifiedSpaces = spaces.map((space) => ({

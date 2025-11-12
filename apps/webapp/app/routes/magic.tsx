@@ -17,6 +17,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
     authuser,
   });
 
+  // Add a small delay to ensure session is fully established before redirect
+  // This helps prevent hydration issues by giving the client time to properly initialize
+  await new Promise(resolve => setTimeout(resolve, 100));
+
   return redirect(redirectTo, {
     headers,
   });

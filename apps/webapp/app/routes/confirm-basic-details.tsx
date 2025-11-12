@@ -8,6 +8,8 @@ import {
 } from "@remix-run/node";
 import { useForm } from "@conform-to/react";
 import { getFieldsetConstraint, parse } from "@conform-to/zod";
+import { useIsHydrated } from "@radix-ui/react-use-is-hydrated";
+import { HydrationGuard } from "~/components/ui/hydration-guard";
 import { LoginPageLayout } from "~/components/layout/login-page-layout";
 import {
   Card,
@@ -76,7 +78,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export default function ConfirmBasicDetails() {
   const lastSubmission = useActionData<typeof action>();
+  const isHydrated = useIsHydrated();
 
+  // Only initialize form after hydration to prevent useRef errors
   const [form, fields] = useForm({
     lastSubmission: lastSubmission as any,
     constraint: getFieldsetConstraint(schema),
@@ -86,6 +90,9 @@ export default function ConfirmBasicDetails() {
     defaultValue: {
       integrations: [],
     },
+    // Disable form until hydrated to prevent hydration mismatches
+    shouldValidate: isHydrated,
+    shouldRevalidate: isHydrated,
   });
 
   return (
@@ -100,38 +107,50 @@ export default function ConfirmBasicDetails() {
         </CardHeader>
 
         <CardContent className="pt-2 text-base">
-          <form method="post" {...form.props}>
-            <div className="space-y-4">
-              <div>
-                <label
-                  htmlFor="workspaceName"
-                  className="text-muted-foreground mb-1 block text-sm"
-                >
-                  Workspace Name
-                </label>
-                <Input
-                  type="text"
-                  id="workspaceName"
-                  placeholder="Workspace name"
-                  name={fields.workspaceName.name}
-                  className="mt-1 block w-full text-base"
-                />
-                {fields.workspaceName.error && (
-                  <div className="text-sm text-red-500">
-                    {fields.workspaceName.error}
-                  </div>
-                )}
+          <HydrationGuard
+            fallback={
+              <div className="space-y-4">
+                <div className="animate-pulse">
+                  <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                  <div className="h-10 bg-gray-200 rounded mb-4"></div>
+                  <div className="h-10 bg-gray-200 rounded w-1/3"></div>
+                </div>
               </div>
+            }
+          >
+            <form method="post" {...form.props}>
+              <div className="space-y-4">
+                <div>
+                  <label
+                    htmlFor="workspaceName"
+                    className="text-muted-foreground mb-1 block text-sm"
+                  >
+                    Workspace Name
+                  </label>
+                  <Input
+                    type="text"
+                    id="workspaceName"
+                    placeholder="Workspace name"
+                    name={fields.workspaceName.name}
+                    className="mt-1 block w-full text-base"
+                  />
+                  {fields.workspaceName.error && (
+                    <div className="text-sm text-red-500">
+                      {fields.workspaceName.error}
+                    </div>
+                  )}
+                </div>
 
-              <Button
-                type="submit"
-                variant="secondary"
-                className="rounded-lg px-4 py-2"
-              >
-                Submit
-              </Button>
-            </div>
-          </form>
+                <Button
+                  type="submit"
+                  variant="secondary"
+                  className="rounded-lg px-4 py-2"
+                >
+                  Submit
+                </Button>
+              </div>
+            </form>
+          </HydrationGuard>
         </CardContent>
       </Card>
     </LoginPageLayout>
