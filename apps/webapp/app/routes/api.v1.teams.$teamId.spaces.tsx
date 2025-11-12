@@ -17,12 +17,50 @@ const TeamParamsSchema = z.object({
   teamId: z.string(),
 });
 
+// Slug generation utility
+function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, '') // Remove special characters
+    .replace(/[\s_-]+/g, '-') // Replace spaces and underscores with hyphens
+    .replace(/^-+|-+$/g, ''); // Remove leading/trailing hyphens
+}
+
+// Function to generate unique slug by checking for duplicates
+async function generateUniqueSlug(name: string, workspaceId: string, teamId?: string): Promise<string> {
+  let slug = generateSlug(name);
+  let counter = 1;
+  let isUnique = false;
+
+  while (!isUnique) {
+    const existingSpace = await prisma.space.findFirst({
+      where: {
+        slug,
+        workspaceId,
+        teamId,
+      },
+    });
+
+    if (!existingSpace) {
+      isUnique = true;
+    } else {
+      slug = `${generateSlug(name)}-${counter}`;
+      counter++;
+    }
+  }
+
+  return slug;
+}
+
 // Schema for creating spaces
 const CreateSpaceSchema = z.object({
-  name: z.string().min(1).max(100),
-  description: z.string().optional(),
-  visibility: z.enum(["PRIVATE", "TEAM", "WORKSPACE"]).default("TEAM"),
-  icon: z.string().optional().default("📁"),
+  name: z.string().min(3).max(100), // Fixed: Require at least 3 characters
+  description: z.string().max(500).optional(), // Fixed: Add max length validation
+  visibility: z.enum(['PRIVATE', 'TEAM', 'WORKSPACE']).optional().default('TEAM'), // Added: Space visibility
+  icon: z.string().max(5).optional().default("📁"), // Fixed: Add max length for icon (accounting for emoji length)
+  autoMode: z.boolean().optional().default(false), // Added: Allow setting auto mode
+  themes: z.array(z.string()).optional().default([]), // Added: Allow setting themes
 });
 
 // POST /api/v1/teams/:teamId/spaces - Create a new space for team
@@ -62,15 +100,21 @@ const { action } = createHybridActionApiRoute(
         return json({ error: "Team not found" }, { status: 404 });
       }
 
-      const { name, description, visibility, icon } = body;
+      const { name, description, visibility, icon, autoMode, themes } = body;
 
-      // Create the space
+      // Generate unique slug for the space
+      const slug = await generateUniqueSlug(name, team.workspaceId, teamId);
+
+      // Create the space with all fields from Prisma schema
       const space = await prisma.space.create({
         data: {
           name,
+          slug,
           description,
-          visibility,
+          visibility: visibility || 'TEAM',
           icon,
+          autoMode,
+          themes,
           teamId,
           workspaceId: team.workspaceId,
         },
@@ -80,12 +124,12 @@ const { action } = createHybridActionApiRoute(
         `Space ${space.id} created for team ${teamId} by user ${userId}`,
       );
 
-      // Log audit trail
+      // Log audit trail (use 'team' as visibility since spaces are team-scoped)
       await AuditService.logSpaceCreate({
         userId,
         spaceId: space.id,
         teamId,
-        visibility,
+        visibility: 'team', // Team spaces are always team-scoped
         request,
       });
 
@@ -93,16 +137,19 @@ const { action } = createHybridActionApiRoute(
         space: {
           id: space.id,
           name: space.name,
+          slug: space.slug,
           description: space.description,
           visibility: space.visibility,
           icon: space.icon,
+          autoMode: space.autoMode,
+          themes: space.themes,
           teamId: space.teamId,
           workspaceId: space.workspaceId,
           createdAt: space.createdAt,
           updatedAt: space.updatedAt,
         },
         success: true,
-      });
+      }, { status: 201 });
     } catch (error) {
       logger.error("Error creating space:", error as Record<string, unknown>);
       const errorMessage = error instanceof Response ? error : { error: "Failed to create space" };
@@ -138,9 +185,12 @@ export const loader = async ({
       spaces: spaces.map((space) => ({
         id: space.id,
         name: space.name,
+        slug: space.slug,
         description: space.description,
         visibility: space.visibility,
         icon: space.icon,
+        autoMode: space.autoMode,
+        themes: space.themes,
         teamId: space.teamId,
         workspaceId: space.workspaceId,
         createdAt: space.createdAt,

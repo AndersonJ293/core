@@ -69,6 +69,18 @@ export const mockPrisma = {
     count: jest.fn(),
   },
 
+  // Team Invite models
+  teamInvite: {
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    findFirst: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+    count: jest.fn(),
+    updateMany: jest.fn(),
+  },
+
   // Other commonly used models
   conversation: {
     findUnique: jest.fn(),

@@ -13,6 +13,19 @@ export class InviteService {
     role: string = "MEMBER",
   ) {
     try {
+      // Validate email format
+      if (!email || typeof email !== 'string') {
+        throw new Error("Valid email address is required");
+      }
+
+      // Basic email validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email.trim())) {
+        throw new Error("Invalid email address format");
+      }
+
+      // Sanitize email (lowercase, trim spaces)
+      const sanitizedEmail = email.toLowerCase().trim();
       // Validate team exists and user can invite
       const canInvite = await permissionService.canPerformTeamAction(
         inviterId,
@@ -41,22 +54,22 @@ export class InviteService {
         select: { email: true },
       });
 
-      if (inviterUser && inviterUser.email === email) {
+      if (inviterUser && inviterUser.email === sanitizedEmail) {
         throw new Error("You cannot invite yourself to a team");
       }
 
       // Check if user already exists
       const invitedUser = await prisma.user.findFirst({
-        where: { email },
+        where: { email: sanitizedEmail },
       });
 
-      // Check for existing pending invite for this email and team
+      // Check for existing pending invite for this email and team (only non-expired ones)
       const existingInvite = await prisma.teamInvite.findFirst({
         where: {
           teamId,
-          invitedUserEmail: email,
+          invitedUserEmail: sanitizedEmail,
           status: "PENDING",
-          expiresAt: { gt: new Date() },
+          expiresAt: { gt: new Date() }, // Only active invites
         },
       });
 
@@ -84,7 +97,7 @@ export class InviteService {
         data: {
           teamId,
           inviterId,
-          invitedUserEmail: email,
+          invitedUserEmail: sanitizedEmail,
           invitedUserId: invitedUser?.id,
           role,
           status: "PENDING",
@@ -109,7 +122,7 @@ export class InviteService {
       });
 
       logger.info(
-        `Team invite created: ${invite.id} for ${email} to team ${teamId} by ${inviterId}`,
+        `Team invite created: ${invite.id} for ${sanitizedEmail} to team ${teamId} by ${inviterId}`,
       );
 
       return invite;
@@ -124,12 +137,21 @@ export class InviteService {
    */
   async getUserPendingInvites(userId: string) {
     try {
+      // Get user email for email-based invites (safe approach)
+      const userEmail = await this.getUserEmailSafely(userId);
+
+      const whereConditions = [
+        { invitedUserId: userId },
+      ];
+
+      // Only add email condition if user email is found
+      if (userEmail) {
+        whereConditions.push({ invitedUserEmail: userEmail });
+      }
+
       const invites = await prisma.teamInvite.findMany({
         where: {
-          OR: [
-            { invitedUserId: userId },
-            { invitedUserEmail: { equals: await this.getUserEmail(userId) } },
-          ],
+          OR: whereConditions,
           status: "PENDING",
           expiresAt: { gt: new Date() },
         },
@@ -165,13 +187,11 @@ export class InviteService {
    */
   async acceptInvite(inviteId: string, userId: string) {
     try {
-      const invite = await prisma.teamInvite.findFirst({
+      // First, try to find invite by userId
+      let invite = await prisma.teamInvite.findFirst({
         where: {
           id: inviteId,
-          OR: [
-            { invitedUserId: userId },
-            { invitedUserEmail: { equals: await this.getUserEmail(userId) } },
-          ],
+          invitedUserId: userId,
           status: "PENDING",
           expiresAt: { gt: new Date() },
         },
@@ -179,6 +199,24 @@ export class InviteService {
           team: true,
         },
       });
+
+      // If not found by userId, try by email (safe approach)
+      if (!invite) {
+        const userEmail = await this.getUserEmailSafely(userId);
+        if (userEmail) {
+          invite = await prisma.teamInvite.findFirst({
+            where: {
+              id: inviteId,
+              invitedUserEmail: userEmail,
+              status: "PENDING",
+              expiresAt: { gt: new Date() },
+            },
+            include: {
+              team: true,
+            },
+          });
+        }
+      }
 
       if (!invite) {
         throw new Error("Invite not found or expired");
@@ -235,17 +273,30 @@ export class InviteService {
    */
   async refuseInvite(inviteId: string, userId: string) {
     try {
-      const invite = await prisma.teamInvite.findFirst({
+      // First, try to find invite by userId
+      let invite = await prisma.teamInvite.findFirst({
         where: {
           id: inviteId,
-          OR: [
-            { invitedUserId: userId },
-            { invitedUserEmail: { equals: await this.getUserEmail(userId) } },
-          ],
+          invitedUserId: userId,
           status: "PENDING",
           expiresAt: { gt: new Date() },
         },
       });
+
+      // If not found by userId, try by email (safe approach)
+      if (!invite) {
+        const userEmail = await this.getUserEmailSafely(userId);
+        if (userEmail) {
+          invite = await prisma.teamInvite.findFirst({
+            where: {
+              id: inviteId,
+              invitedUserEmail: userEmail,
+              status: "PENDING",
+              expiresAt: { gt: new Date() },
+            },
+          });
+        }
+      }
 
       if (!invite) {
         throw new Error("Invite not found or expired");
@@ -409,6 +460,21 @@ export class InviteService {
     }
 
     return user.email;
+  }
+
+  /**
+   * Helper method to get user email safely (returns null if not found)
+   */
+  private async getUserEmailSafely(userId: string): Promise<string | null> {
+    try {
+      const user = await prisma.user.findFirst({
+        where: { id: userId },
+        select: { email: true },
+      });
+      return user?.email || null;
+    } catch {
+      return null;
+    }
   }
 }
 

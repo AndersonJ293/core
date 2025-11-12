@@ -468,10 +468,12 @@ model RecallLog {
 }
 
 model Space {
-  id           String   @id @default(cuid())
+  id           String         @id @default(cuid())
   name         String
+  slug         String         @unique
   description  String?
-  autoMode     Boolean  @default(false)
+  visibility   SpaceVisibility @default(TEAM)
+  autoMode     Boolean        @default(false)
   summary      String?
   themes       String[]
   contextCount Int? // Count of context items in this space (episodes, statements, etc.)
@@ -494,6 +496,9 @@ model Space {
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   SpacePattern SpacePattern[]
+
+  @@index([slug])
+  @@index([workspaceId, teamId])
 }
 
 model SpacePattern {
@@ -840,4 +845,10 @@ enum TeamRole {
   OWNER
   ADMIN
   MEMBER
+}
+
+enum SpaceVisibility {
+  PRIVATE
+  TEAM
+  WORKSPACE
 }
